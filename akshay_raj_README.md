@@ -1,98 +1,133 @@
-# YOLO-object-detection-with-OpenCV
-Object detection using YOLO object detector
+# SmartGlass AI – Object Detection with OpenCV
 
-### Detect objects in both images and video streams using Deep Learning, OpenCV, and Python.
+> Real-time object detection platform with YOLO, MobileNet-SSD, and custom model training — built for wearable AI smart glasses.
 
-I’ll be using YOLOv3 in this project, in particular, YOLO trained on the COCO dataset.
+**By Akshay Raj**
 
-The COCO dataset consists of 80 labels, including, but not limited to:
+---
 
-- People
-- Bicycles
-- Cars and trucks
-- Airplanes
-- Stop signs and fire hydrants
-- Animals, including cats, dogs, birds, horses, cows, and sheep, to name a few
-- Kitchen and dining objects, such as wine glasses, cups, forks, knives, spoons, etc.
-…and much more!
+## Features
 
-You can find a full list of what YOLO trained on the COCO dataset can detect <a href="https://github.com/pjreddie/darknet/blob/master/data/coco.names" target="_blank"><b>using this link.</b></a>
+- **Live Camera Detection** — YOLOv4-tiny (80 COCO classes) with real-time webcam streaming
+- **MobileNet-SSD Fallback** — 20 VOC classes, ultra-lightweight
+- **Custom Model Training** — Upload image/audio/text .zip datasets, auto-detect type, train & hot-reload
+- **Adapter Switching** — Hot-swap between YOLO, MobileNet-SSD, and custom models from the UI
+- **Elegant Web Dashboard** — Single-page app with live terminal, Chart.js training graphs, drag-and-drop upload
+- **Image Detection** — Upload a single image for instant object detection
+- **Server-Sent Events** — Real-time log streaming and training progress
 
-- yolo-coco : The YOLOv3 object detector pre-trained (on the COCO dataset) model files. These were trained by the <a href="https://pjreddie.com/darknet/yolo/" target="_blank"> <b>Darknet team.</b> </a>
+---
 
-## YOLO object detection in images
+## Quick Start
 
-## Installation
+### 1. Clone & Setup (one command)
 
-- `pip install numpy`
-- `pip install opencv-python`
+```bash
+git clone https://github.com/AkshayRaj367/Akkiglasses.git
+cd Akkiglasses
+python setup.py
+```
 
-## To Run the project
+The setup script will:
+- Create a `.venv` virtual environment
+- Install all Python dependencies
+- Download YOLOv4-tiny weights (~23 MB) if missing
+- Create required directories
+- Verify the installation
 
-- `python yolo.py --image images/baggage_claim.jpg`
+### 2. Run the App
 
-## Screenshots
-![Image](/Object%20dection%20using%20image/1.png)
+**Windows (PowerShell):**
+```powershell
+& .venv\Scripts\Activate.ps1
+cd webapp
+python app.py
+```
 
-Here you can see that YOLO has not only detected each person in the input image, but also the suitcases as well!
+**macOS / Linux:**
+```bash
+source .venv/bin/activate
+cd webapp
+python app.py
+```
 
-Furthermore, if you take a look at the right corner of the image you’ll see that YOLO has also detected the handbag on the lady’s shoulder.
+### 3. Open in Browser
 
-<img src="https://github.com/yash42828/YOLO-object-detection-with-OpenCV/blob/master/Object%20dection%20using%20image/2.png">
+```
+http://localhost:5000
+```
 
-YOLO is able to correctly detect each of the players on the pitch, including the soccer ball itself. Notice the person in the background who is detected despite the area being highly blurred and partially obscured.
+---
 
-## YOLO object detection in video streams
+## Project Structure
 
-## Installation
+```
+├── setup.py                     # Automated setup script
+├── akshay_raj_README.md         # This file
+├── webapp/
+│   ├── app.py                   # Flask server (all API routes)
+│   ├── model_manager.py         # Centralized model manager + hot-reload
+│   ├── video_stream.py          # Webcam capture + detection + MJPEG
+│   ├── trainer.py               # Auto-training adapter (image/voice/text)
+│   ├── requirements.txt         # Python dependencies
+│   ├── templates/index.html     # Frontend UI
+│   ├── static/                  # Static assets
+│   └── uploads/                 # User-uploaded datasets (gitignored)
+├── yolo-coco/                   # YOLO config + weights
+│   ├── yolov4-tiny.cfg
+│   ├── yolov4-tiny.weights      # Downloaded by setup.py
+│   └── coco.names
+├── real-time-object-detection/  # MobileNet-SSD weights
+│   ├── MobileNetSSD_deploy.prototxt.txt
+│   └── MobileNetSSD_deploy.caffemodel
+└── trained_models/              # Custom model checkpoints (gitignored)
+    ├── image_model/
+    ├── text_model/
+    └── voice_model/
+```
 
-- `pip install numpy`
-- `pip install opencv-python`
+## API Endpoints
 
-## To Run the project
+| Endpoint | Method | Description |
+|---|---|---|
+| `/` | GET | Web dashboard |
+| `/api/video/start` | POST | Start webcam stream |
+| `/api/video/stop` | POST | Stop webcam |
+| `/api/video/feed` | GET | MJPEG video feed |
+| `/api/video/detections` | GET | Current detection results + FPS |
+| `/api/detect/image` | POST | Detect objects in uploaded image |
+| `/api/upload` | POST | Upload .zip dataset |
+| `/api/upload/clear` | POST | Clear uploaded dataset |
+| `/api/train` | POST | Start model training |
+| `/api/train/status/stream` | GET | SSE training progress |
+| `/api/models` | GET | List all models |
+| `/api/models/switch` | POST | Switch active adapter |
+| `/api/models/history` | GET | Training history |
+| `/api/models/reload` | POST | Force reload models |
+| `/api/logs` | GET | Recent server logs |
+| `/api/logs/stream` | GET | SSE server log stream |
+| `/api/classify/text` | POST | Text classification |
 
-- `python yolo_video.py --input videos/airport.mp4 --output output/airport_output.avi --yolo yolo-coco`
+---
 
-## Screenshots
+## Requirements
 
-<img src="https://github.com/yash42828/YOLO-object-detection-with-OpenCV/blob/master/Object%20detection%20using%20video/car.gif">
+- Python 3.10+
+- Webcam (for live detection)
+- ~500 MB disk space (dependencies + YOLO weights)
 
-In the video/GIF, you can see not only the vehicles being detected, but people, as well as the traffic lights, are detected too!
+---
 
-The YOLO object detector is performing quite well here. 
+## How It Works
 
-## Limitation:
-### Arguably the largest limitation and drawback of the YOLO object detector is that:
+1. **Detection** — The app uses YOLOv4-tiny by default for fast 80-class object detection. If YOLO weights aren't available, it falls back to MobileNet-SSD (20 classes).
 
-- It does not always handle small objects well
-- It especially does not handle objects grouped close together
-- The reason for this limitation is due to the YOLO algorithm itself:
+2. **Custom Training** — Upload a .zip file containing images (in class folders), audio files, or text CSVs. The trainer auto-detects the dataset type, builds the right model (MobileNetV2 for images, CNN for audio, TF-IDF+SVM for text), and saves it to `trained_models/`.
 
-The YOLO object detector divides an input image into an SxS grid where each cell in the grid predicts only a single object.
-If there exist multiple, small objects in a single cell then YOLO will be unable to detect them, ultimately leading to missed object detections.
-Therefore, if you know your dataset consists of many small objects grouped close together then you should not use the YOLO object detector.
+3. **Hot-Reload** — A background watcher thread polls `trained_models/` every 3 seconds. When a new checkpoint is found, it's loaded without restarting the server.
 
-In terms of small objects, Faster R-CNN tends to work the best; however, it’s also the slowest.
+4. **Adapter Switching** — Switch between YOLO, SSD, and custom models from the top bar dropdown. Custom model predictions overlay on top of the base detector's bounding boxes.
 
-SSDs can also be used here; however, SSDs can also struggle with smaller objects (but not as much as YOLO).
+---
 
-SSDs often give a nice tradeoff in terms of speed and accuracy as well.
-
-## Real-time object detection with deep learning and OpenCV
-
-## Installation
-
-- `pip install numpy`
-- `pip install opencv-python`
-- `pip install imutils`
-
-## To Run the project
-
-- `python real_time_object_detection.py`
-
-## Screenshots
-<img src="https://github.com/yash42828/YOLO-object-detection-with-OpenCV/blob/master/real-time-object-detection/real_time.gif">
-
-Notice how our deep learning object detector can detect not only a person, but also the sofa and the chair next to person — all in real-time!
-
-Just follow☝️ me and Star⭐ my repository
+*Originally forked from YOLO-object-detection-with-OpenCV. Rebuilt as a full-stack AI platform.*

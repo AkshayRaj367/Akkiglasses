@@ -84,10 +84,12 @@ class ModelManager:
         self._voice_meta  = None
         self._voice_hash  = None
 
-        # pre-load anything already on disk
-        self._try_load_image_model()
-        self._try_load_text_model()
-        self._try_load_voice_model()
+        # pre-load anything already on disk (graceful -- torch may be broken)
+        for loader in (self._try_load_image_model, self._try_load_text_model, self._try_load_voice_model):
+            try:
+                loader()
+            except Exception as e:
+                logger.warning(f"Skipping {loader.__name__}: {e}")
 
         # background watcher
         self._stop_event = threading.Event()
@@ -259,9 +261,11 @@ class ModelManager:
         """Poll disk every 3 seconds for new / changed model files."""
         import time
         while not self._stop_event.is_set():
-            self._try_load_image_model()
-            self._try_load_text_model()
-            self._try_load_voice_model()
+            for loader in (self._try_load_image_model, self._try_load_text_model, self._try_load_voice_model):
+                try:
+                    loader()
+                except Exception as e:
+                    logger.debug(f"Watcher skip {loader.__name__}: {e}")
             time.sleep(3)
 
     def stop(self):

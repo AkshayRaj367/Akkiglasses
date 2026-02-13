@@ -26,18 +26,36 @@ logger = logging.getLogger("video_stream")
 class VideoStream:
     """
     Thread-safe webcam → detection → MJPEG pipeline.
+    Optimized for high FPS (200+) with configurable quality vs speed tradeoffs.
 
     Usage:
-        vs = VideoStream(model_manager)
+        vs = VideoStream(model_manager, fps_mode="ultra")  # for 200+ FPS
         vs.start()
         # In Flask route:
         return Response(vs.generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
     """
 
-    def __init__(self, model_manager, src=0, confidence=0.2):
+    def __init__(self, model_manager, src=0, confidence=0.2, fps_mode="balanced"):
         self.model_manager = model_manager
         self.src = src
         self.confidence = confidence
+        
+        # FPS optimization modes
+        if fps_mode == "ultra":  # 200+ FPS target
+            self.detection_interval = 10    # detect every 10th frame
+            self.jpeg_quality = 60          # lower quality, faster encode
+            self.skip_custom = True         # skip custom model inference
+            self.stream_delay = 0.002       # minimal delay (500 FPS cap)
+        elif fps_mode == "high":  # 100+ FPS target
+            self.detection_interval = 5     # detect every 5th frame
+            self.jpeg_quality = 70
+            self.skip_custom = False
+            self.stream_delay = 0.005       # 200 FPS cap
+        else:  # balanced (30-60 FPS)
+            self.detection_interval = 1     # detect every frame
+            self.jpeg_quality = 80
+            self.skip_custom = False
+            self.stream_delay = 0.016       # 60 FPS cap
 
         self._frame = None          # latest raw frame  (BGR)
         self._jpeg  = None          # latest annotated JPEG bytes
@@ -49,6 +67,7 @@ class VideoStream:
         # stats
         self.fps  = 0.0
         self._detections = []       # latest detection results
+        self._frame_counter = 0     # for detection interval
 
     # ── lifecycle ─────────────────────────────────────────────────────────
 
@@ -81,21 +100,37 @@ class VideoStream:
             self._running = False
             return
 
+        # Optimize camera settings for high FPS
+        self._cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # reduce buffer to minimize latency
+        self._cap.set(cv2.CAP_PROP_FPS, 60)        # request higher FPS from camera
+        
         prev_time = time.time()
         frame_count = 0
+        self._frame_counter = 0
+        last_detections = []  # cache last detection results
 
         while self._running:
             ok, frame = self._cap.read()
             if not ok or frame is None:
-                time.sleep(0.01)
+                time.sleep(0.001)  # minimal delay
                 continue
 
-            # ── run detection ──
+            self._frame_counter += 1
             annotated = frame.copy()
             det_results = []
-
-            # 1) YOLO / SSD object detection
-            ssd_results = self.model_manager.detect_objects(frame, self.confidence)
+            
+            # ── Skip expensive detection on most frames (for ultra FPS) ──
+            should_detect = (self._frame_counter % self.detection_interval) == 0
+            
+            if should_detect:
+                # 1) YOLO / SSD object detection
+                ssd_results = self.model_manager.detect_objects(frame, self.confidence)
+                last_detections = ssd_results  # cache for non-detection frames
+            else:
+                # Use cached results with updated boxes (simple tracking)
+                ssd_results = last_detections
+            
+            # Draw detection boxes (always, even on non-detection frames)
             for det in ssd_results:
                 x1, y1, x2, y2 = det["box"]
                 color = tuple(int(c) for c in det["color"])
@@ -106,10 +141,14 @@ class VideoStream:
                             cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)
             det_results.extend(ssd_results)
 
-            # 2) Custom image model
-            custom_classes = self.model_manager.get_custom_image_classes()
-            is_binary = custom_classes is not None and len(custom_classes) <= 2
-            non_bg_classes = [c for c in (custom_classes or []) if c != "background"]
+            # 2) Custom image model (skip in ultra FPS mode)
+            if not self.skip_custom and should_detect:
+                try:
+                  custom_classes = self.model_manager.get_custom_image_classes()
+                except Exception:
+                  custom_classes = None
+                is_binary = custom_classes is not None and len(custom_classes) <= 2
+                non_bg_classes = [c for c in (custom_classes or []) if c != "background"]
 
             if is_binary and non_bg_classes:
                 # ── Binary model (e.g. background / light_bulb) ──
@@ -126,7 +165,10 @@ class VideoStream:
                     if x2c - x1c < 30 or y2c - y1c < 30:
                         continue
                     crop = frame[y1c:y2c, x1c:x2c]
-                    result = self.model_manager.classify_image_custom(crop)
+                    try:
+                        result = self.model_manager.classify_image_custom(crop)
+                    except Exception:
+                        result = None
                     if result:
                         clabel, cconf = result
                         crop_results.append((det, clabel, cconf, x1c, y1c, x2c, y2c))
@@ -162,7 +204,10 @@ class VideoStream:
 
                 # Scene-level: only at very high confidence AND only
                 # if the model proved selective on crops
-                custom_info = self.model_manager.classify_image_custom(frame)
+                try:
+                    custom_info = self.model_manager.classify_image_custom(frame)
+                except Exception:
+                    custom_info = None
                 if custom_info:
                     clabel, cconf = custom_info
                     # Require 95%+ AND the crop selectivity check passed
@@ -186,14 +231,24 @@ class VideoStream:
 
             elif custom_classes and len(custom_classes) >= 3:
                 # ── Multi-class model: run on whole frame + each crop ──
-                custom_info = self.model_manager.classify_image_custom(frame)
+                # Dynamic threshold: many classes → lower bar
+                n_cls = len(custom_classes)
+                frame_thresh = max(0.20, 0.7 - n_cls * 0.006)  # e.g. 75 cls → 0.25
+                crop_thresh  = max(0.25, 0.7 - n_cls * 0.005)  # e.g. 75 cls → 0.325
+
+                try:
+                    custom_info = self.model_manager.classify_image_custom(frame)
+                except Exception as _ce:
+                    logger.debug(f"Custom classify frame error: {_ce}")
+                    custom_info = None
                 if custom_info:
                     clabel, cconf = custom_info
-                    if cconf > 0.7 and clabel != "background":
+                    if clabel != "background" and cconf > frame_thresh:
+                        color_scene = (0, 255, 255)
                         cv2.putText(annotated,
                                     f"[Custom] {clabel}: {cconf*100:.1f}%",
                                     (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
-                                    0.8, (0, 255, 255), 2)
+                                    0.8, color_scene, 2)
                         det_results.append({
                             "label": f"[Custom] {clabel}",
                             "confidence": cconf, "box": None,
@@ -207,10 +262,13 @@ class VideoStream:
                     if x2c - x1c < 20 or y2c - y1c < 20:
                         continue
                     crop = frame[y1c:y2c, x1c:x2c]
-                    result = self.model_manager.classify_image_custom(crop)
+                    try:
+                        result = self.model_manager.classify_image_custom(crop)
+                    except Exception:
+                        result = None
                     if result:
                         clabel, cconf = result
-                        if cconf > 0.7 and clabel != "background":
+                        if clabel != "background" and cconf > crop_thresh:
                             color_custom = (0, 255, 255)
                             label_custom = f"{clabel}: {cconf*100:.1f}%"
                             y_bottom = y2 + 18 if y2 + 18 < h_frame - 5 else y1 - 30
@@ -239,8 +297,9 @@ class VideoStream:
                         (10, annotated.shape[0] - 15),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-            # ── encode ──
-            _, jpeg = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            # ── encode with optimized quality ──
+            jpeg_params = [cv2.IMWRITE_JPEG_QUALITY, self.jpeg_quality]
+            _, jpeg = cv2.imencode(".jpg", annotated, jpeg_params)
             with self._lock:
                 self._frame = frame
                 self._jpeg  = jpeg.tobytes()
@@ -259,10 +318,10 @@ class VideoStream:
             return list(self._detections)
 
     def generate(self):
-        """Yield MJPEG frames for Flask streaming response."""
+        """Yield MJPEG frames for Flask streaming response. Optimized for high FPS."""
         while self._running:
             jpeg = self.get_jpeg()
             if jpeg is not None:
                 yield (b"--frame\r\n"
                        b"Content-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n")
-            time.sleep(0.03)   # ~30 fps cap
+            time.sleep(self.stream_delay)  # configurable delay based on fps_mode

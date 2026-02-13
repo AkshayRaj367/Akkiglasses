@@ -1,884 +1,863 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Smart Glasses – AI Dashboard</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🕶</text></svg>">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache,no-store,must-revalidate">
+<title>SmartGlass AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
-/* ─── DESIGN SYSTEM ─── */
+/*============================================================
+  SMARTGLASS AI  –  Elegant Single-Page UI
+============================================================*/
 :root {
-  --bg:       #0b1120;
-  --bg2:      #111827;
-  --card:     #1e293b;
-  --card2:    #263548;
-  --border:   #334155;
-  --accent:   #38bdf8;
-  --accent2:  #818cf8;
-  --green:    #22c55e;
-  --red:      #ef4444;
-  --orange:   #f97316;
-  --yellow:   #eab308;
-  --text:     #e2e8f0;
-  --muted:    #94a3b8;
-  --radius:   12px;
+  --bg: #f5f6f8; --surface: #ffffff; --border: #e4e7ec;
+  --text: #0f172a; --muted: #64748b; --accent: #4f46e5;
+  --accent-light: #eef2ff; --accent-dark: #4338ca;
+  --green: #10b981; --green-bg: #ecfdf5; --green-text: #065f46;
+  --red: #ef4444; --red-bg: #fef2f2; --red-text: #991b1b;
+  --orange: #f59e0b; --orange-bg: #fffbeb;
+  --radius: 14px; --radius-sm: 8px;
+  --shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+  --shadow-lg: 0 10px 30px rgba(0,0,0,.08);
 }
-*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-body {
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  min-height: 100vh;
-  line-height: 1.5;
-}
-a { color: var(--accent); text-decoration: none; }
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html{font-size:15px;scroll-behavior:smooth}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;min-height:100vh}
+img{max-width:100%;display:block}
+input,select,textarea,button{font:inherit}
 
-/* ─── LAYOUT ─── */
-.topbar {
-  background: var(--bg2);
-  border-bottom: 1px solid var(--border);
-  padding: .75rem 1.5rem;
-  display: flex; align-items: center; gap: 1rem;
-  position: sticky; top: 0; z-index: 100;
-}
-.topbar h1 { font-size: 1.15rem; font-weight: 700; }
-.topbar .pill {
-  margin-left: auto;
-  padding: 3px 12px; border-radius: 999px;
-  font-size: .72rem; font-weight: 600; text-transform: uppercase;
-  letter-spacing: .4px;
-}
-.pill.online  { background: #064e3b; color: #6ee7b7; }
-.pill.offline { background: #7f1d1d; color: #fca5a5; }
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px}
 
-.container { max-width: 1280px; margin: 0 auto; padding: 1.5rem 1rem; }
+/* ═══════════════════════════════════════════════
+   TOP BAR
+═══════════════════════════════════════════════ */
+.topbar{
+  position:sticky;top:0;z-index:500;
+  display:flex;align-items:center;gap:.75rem;
+  background:var(--surface);border-bottom:1px solid var(--border);
+  padding:0 2rem;height:60px;
+  backdrop-filter:blur(12px);background:rgba(255,255,255,.92);
+}
+.logo{font-weight:900;font-size:1.25rem;letter-spacing:-.5px;margin-right:1.5rem;display:flex;align-items:center;gap:8px}
+.logo .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);display:inline-block;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
-/* tab nav */
-.tabs {
-  display: flex; gap: 0; border-bottom: 2px solid var(--border);
-  margin-bottom: 1.5rem;
+.nav-pills{display:flex;gap:4px;background:var(--bg);padding:4px;border-radius:10px}
+.pill{
+  border:none;background:none;padding:7px 14px;
+  font-weight:500;font-size:.87rem;color:var(--muted);
+  border-radius:8px;cursor:pointer;transition:all .15s;
+  white-space:nowrap;
 }
-.tabs button {
-  background: none; border: none; color: var(--muted); font-size: .92rem;
-  padding: .65rem 1.2rem; cursor: pointer; border-bottom: 2px solid transparent;
-  margin-bottom: -2px; transition: .2s;
-}
-.tabs button:hover { color: var(--text); }
-.tabs button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
-.tab-panel { display: none; }
-.tab-panel.active { display: block; }
+.pill:hover{color:var(--text);background:var(--surface)}
+.pill.active{background:var(--accent);color:#fff;box-shadow:0 2px 8px rgba(79,70,229,.3)}
 
-/* ─── CARDS ─── */
-.card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 1.4rem;
-  margin-bottom: 1.2rem;
+/* Adapter badge */
+.adapter-badge{
+  margin-left:auto;display:flex;align-items:center;gap:8px;
+  background:var(--accent-light);border:1px solid #c7d2fe;
+  padding:6px 14px;border-radius:20px;font-size:.82rem;font-weight:600;
+  color:var(--accent);cursor:pointer;position:relative;
+  transition:all .15s;
 }
-.card h2 {
-  font-size: 1.05rem; margin-bottom: .9rem;
-  display: flex; align-items: center; gap: .45rem;
+.adapter-badge:hover{border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,70,229,.1)}
+.adapter-badge .live-dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0}
+.adapter-dropdown{
+  display:none;position:absolute;top:calc(100% + 8px);right:0;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  box-shadow:var(--shadow-lg);min-width:300px;overflow:hidden;z-index:600;
 }
-.card h3 { font-size: .92rem; color: var(--muted); margin-bottom: .6rem; }
+.adapter-dropdown.open{display:block}
+.adapter-dd-head{padding:14px 16px;border-bottom:1px solid var(--border);font-size:.75rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.adapter-opt{
+  display:flex;align-items:center;gap:12px;padding:12px 16px;
+  cursor:pointer;transition:background .1s;
+}
+.adapter-opt:hover{background:var(--bg)}
+.adapter-opt.active{background:var(--accent-light)}
+.adapter-opt .radio{
+  width:18px;height:18px;border-radius:50%;border:2px solid #c7d2fe;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.adapter-opt.active .radio{border-color:var(--accent)}
+.adapter-opt.active .radio::after{content:'';width:10px;height:10px;border-radius:50%;background:var(--accent)}
+.adapter-opt-text strong{display:block;font-size:.9rem}
+.adapter-opt-text small{color:var(--muted);font-size:.78rem}
 
-/* ─── GRID ─── */
-.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; }
-@media(max-width:860px){ .grid2 { grid-template-columns: 1fr; } }
+/* ═══════════════════════════════════════════════
+   PAGES
+═══════════════════════════════════════════════ */
+.page{display:none}
+.page.on{display:block}
+.page-wrap{max-width:1240px;margin:0 auto;padding:2rem 2rem 4rem}
+.page-header{display:flex;align-items:center;gap:10px;margin-bottom:1.75rem}
+.page-header h2{font-size:1.5rem;font-weight:800;letter-spacing:-.4px}
+.page-header .tag{font-size:.8rem;padding:4px 10px;border-radius:6px;font-weight:600}
 
-/* ─── VIDEO ─── */
-.video-wrapper {
-  position: relative; background: #000; border-radius: 10px;
-  overflow: hidden; aspect-ratio: 16/9;
-}
-.video-wrapper img {
-  width: 100%; height: 100%; object-fit: contain; display: block;
-}
-.video-overlay {
-  position: absolute; bottom: 0; left: 0; right: 0;
-  background: linear-gradient(transparent, rgba(0,0,0,.7));
-  padding: .6rem 1rem; display: flex; justify-content: space-between;
-  font-size: .82rem; color: #ccc;
-}
-.video-placeholder {
-  width: 100%; height: 100%; display: flex; align-items: center;
-  justify-content: center; color: var(--muted); flex-direction: column; gap: .4rem;
-}
+/* ─── Cards ─── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;box-shadow:var(--shadow)}
+.card-label{font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:1rem;display:flex;align-items:center;gap:6px}
 
-/* ─── DETECTION LIST ─── */
-.det-list { max-height: 240px; overflow-y: auto; }
-.det-item {
-  display: flex; align-items: center; gap: .6rem;
-  padding: .4rem 0; border-bottom: 1px solid var(--border); font-size: .85rem;
+/* ─── Buttons ─── */
+.btn{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:9px 18px;border:none;border-radius:var(--radius-sm);
+  font-weight:600;font-size:.88rem;cursor:pointer;transition:all .15s;
 }
-.det-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-.det-conf { margin-left: auto; color: var(--muted); font-size: .78rem; }
+.btn-accent{background:var(--accent);color:#fff}
+.btn-accent:hover{background:var(--accent-dark);box-shadow:0 4px 12px rgba(79,70,229,.25)}
+.btn-accent:disabled{opacity:.5;cursor:not-allowed}
+.btn-ghost{background:var(--bg);color:var(--text);border:1px solid var(--border)}
+.btn-ghost:hover{background:#e2e8f0}
+.btn-danger{background:var(--red-bg);color:var(--red-text);border:1px solid #fecaca}
+.btn-danger:hover{background:#fee2e2}
+.btn-sm{padding:5px 12px;font-size:.8rem;border-radius:6px}
 
-/* ─── UPLOAD ─── */
-.upload-zone {
-  border: 2px dashed var(--border); border-radius: 10px;
-  padding: 2rem; text-align: center; cursor: pointer; transition: .2s;
+/* ═══════════════════════════════════════════════
+   HOME
+═══════════════════════════════════════════════ */
+.hero{text-align:center;padding:5rem 1rem 3rem}
+.hero-badge{
+  display:inline-flex;align-items:center;gap:6px;
+  background:var(--accent-light);color:var(--accent);
+  font-weight:600;font-size:.82rem;padding:6px 14px;border-radius:20px;
+  margin-bottom:1.5rem;
 }
-.upload-zone:hover, .upload-zone.drag { border-color: var(--accent); }
-.upload-zone input { display: none; }
-.upload-zone svg { width: 40px; height: 40px; color: var(--accent); margin-bottom: .4rem; }
+.hero h1{font-size:3.2rem;font-weight:900;letter-spacing:-1.2px;line-height:1.15;margin-bottom:1rem}
+.hero h1 span{background:linear-gradient(135deg,var(--accent),#7c3aed);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero p{font-size:1.1rem;color:var(--muted);max-width:580px;margin:0 auto 2.5rem}
 
-/* ─── FORM GRID ─── */
-.form-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px,1fr));
-  gap: .8rem; margin: 1rem 0;
+.feat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1.25rem;margin:3rem 0}
+.feat{padding:1.75rem}
+.feat .emoji{font-size:1.8rem;margin-bottom:.75rem;display:block}
+.feat h3{font-size:1rem;font-weight:700;margin-bottom:.4rem}
+.feat p{font-size:.88rem;color:var(--muted)}
+
+.about-card{display:flex;align-items:center;gap:1.25rem;padding:1.5rem;margin-top:3rem}
+.about-av{
+  width:56px;height:56px;border-radius:50%;
+  background:linear-gradient(135deg,var(--accent),#7c3aed);color:#fff;
+  display:flex;align-items:center;justify-content:center;
+  font-weight:800;font-size:1.25rem;flex-shrink:0;
 }
-.form-grid label { font-size: .78rem; color: var(--muted); display: block; margin-bottom: 2px; }
-.form-grid input, .form-grid select {
-  width: 100%; padding: .42rem .6rem; border: 1px solid var(--border);
-  border-radius: 8px; background: var(--bg); color: var(--text); font-size: .88rem;
+.about-text h4{font-weight:700;font-size:1.05rem}
+.about-text p{color:var(--muted);font-size:.9rem}
+
+/* ═══════════════════════════════════════════════
+   DETECTION
+═══════════════════════════════════════════════ */
+.det-grid{display:grid;grid-template-columns:1fr 300px;gap:1.25rem}
+@media(max-width:900px){.det-grid{grid-template-columns:1fr}}
+
+.vid-box{
+  background:#0a0a0a;border-radius:var(--radius);overflow:hidden;
+  position:relative;min-height:380px;resize:both;
 }
-
-/* ─── BUTTONS ─── */
-.btn {
-  display: inline-flex; align-items: center; gap: .35rem;
-  padding: .5rem 1.2rem; border: none; border-radius: 8px;
-  font-size: .88rem; font-weight: 600; cursor: pointer; transition: .15s;
+.vid-box img{width:100%;height:100%;object-fit:contain}
+.vid-ph{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:380px;color:#555;gap:.75rem;
 }
-.btn:disabled { opacity: .4; cursor: not-allowed; }
-.btn-primary { background: var(--accent); color: #0f172a; }
-.btn-primary:hover:not(:disabled) { background: #7dd3fc; }
-.btn-green   { background: var(--green); color: #0f172a; }
-.btn-red     { background: var(--red); color: #fff; }
-.btn-ghost   { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
-.btn-sm      { padding: .3rem .8rem; font-size: .8rem; }
+.vid-ph .cam{font-size:2.5rem}
 
-/* ─── PROGRESS ─── */
-.progress-bar {
-  height: 8px; border-radius: 4px; background: var(--bg); overflow: hidden; margin: .6rem 0;
+.side-col{display:flex;flex-direction:column;gap:1.25rem}
+
+.stat-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bg)}
+.stat-row:last-child{border:none}
+.stat-k{color:var(--muted);font-size:.88rem}
+.stat-v{font-weight:700;font-size:.88rem}
+
+.det-item{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--bg)}
+.det-item:last-child{border:none}
+.det-name{font-weight:600;font-size:.88rem}
+.det-conf{font-size:.78rem;font-weight:700;padding:3px 8px;border-radius:5px;background:var(--green-bg);color:var(--green-text)}
+
+/* ─── Upload zone ─── */
+.drop-zone{
+  border:2px dashed var(--border);border-radius:var(--radius);
+  padding:3rem 2rem;text-align:center;cursor:pointer;transition:all .2s;
 }
-.progress-bar .fill {
-  height: 100%; border-radius: 4px;
-  background: linear-gradient(90deg, var(--accent), var(--green));
-  transition: width .4s;
+.drop-zone:hover{border-color:var(--accent);background:var(--accent-light)}
+.drop-zone.over{border-color:var(--accent);background:var(--accent-light)}
+.drop-zone .dz-icon{font-size:2.2rem;margin-bottom:.75rem}
+.drop-zone h3{font-weight:700;font-size:1rem;margin-bottom:.25rem}
+.drop-zone p{color:var(--muted);font-size:.85rem}
+
+/* Dataset badge */
+.ds-badge{
+  display:flex;align-items:center;gap:.75rem;padding:1rem;
+  background:var(--accent-light);border:1px solid #c7d2fe;border-radius:var(--radius-sm);
 }
-
-/* ─── BADGES ─── */
-.badge {
-  display: inline-block; padding: 2px 10px; border-radius: 999px;
-  font-size: .72rem; font-weight: 600; text-transform: uppercase;
+.ds-badge .ds-ico{
+  width:42px;height:42px;border-radius:10px;background:var(--accent);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;
 }
-.badge.idle      { background: #334155; color: var(--muted); }
-.badge.detecting { background: #1e40af; color: #93c5fd; }
-.badge.training  { background: #854d0e; color: #fde68a; }
-.badge.done      { background: #166534; color: #86efac; }
-.badge.error     { background: #7f1d1d; color: #fca5a5; }
-.type-tag {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 3px 10px; border-radius: 6px; font-size: .78rem; font-weight: 600;
+.ds-badge .ds-txt strong{display:block;font-size:.95rem}
+.ds-badge .ds-txt small{color:var(--muted);font-size:.8rem}
+
+/* ─── Training layout ─── */
+.train-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem}
+@media(max-width:768px){.train-grid{grid-template-columns:1fr}}
+
+.form-row{margin-bottom:1rem}
+.form-row label{display:block;font-weight:600;font-size:.85rem;margin-bottom:4px}
+.form-input{
+  width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);
+  background:var(--surface);transition:border .15s;
 }
-.type-tag.image { background: #312e81; color: #a5b4fc; }
-.type-tag.voice, .type-tag.audio { background: #4a2040; color: #f0abfc; }
-.type-tag.text  { background: #1a3a2a; color: #86efac; }
+.form-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,70,229,.1)}
 
-/* ─── LOG ─── */
-.log {
-  background: var(--bg); border-radius: 8px; padding: .8rem;
-  max-height: 200px; overflow-y: auto; font-family: 'Cascadia Code', monospace;
-  font-size: .8rem; line-height: 1.7; color: var(--muted);
+.prog-bar{height:6px;background:var(--bg);border-radius:3px;overflow:hidden;margin:1rem 0}
+.prog-fill{height:100%;background:var(--accent);border-radius:3px;transition:width .3s}
+
+/* ─── Models grid ─── */
+.models-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1.25rem}
+.m-head{display:flex;align-items:center;gap:.75rem;margin-bottom:1rem}
+.m-head .m-ico{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0}
+.m-head h3{font-weight:700;font-size:1rem}
+.m-meta{font-size:.85rem;color:var(--muted)}
+.m-meta span{display:block;padding:5px 0;border-bottom:1px solid var(--bg)}
+.m-meta span:last-child{border:none}
+.badge{display:inline-block;padding:3px 9px;border-radius:5px;font-size:.75rem;font-weight:700}
+.badge-on{background:var(--green-bg);color:var(--green-text)}
+.badge-off{background:var(--bg);color:var(--muted)}
+
+/* ─── Terminal ─── */
+.terminal{background:#111113;border-radius:var(--radius);overflow:hidden;border:1px solid #2a2a2e}
+.term-bar{
+  background:#1a1a1e;padding:10px 14px;display:flex;align-items:center;gap:8px;
 }
-.log .entry { border-bottom: 1px solid #1e293b; padding: 1px 0; }
-
-/* ─── TABLE ─── */
-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
-th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid var(--border); }
-th { color: var(--muted); font-weight: 500; text-transform: uppercase; font-size: .72rem; letter-spacing: .4px; }
-
-/* ─── STATS ROW ─── */
-.stats { display: flex; gap: 1.2rem; flex-wrap: wrap; margin: .4rem 0; }
-.stat { display: flex; flex-direction: column; }
-.stat .val { font-size: 1.1rem; font-weight: 700; }
-.stat .lbl { font-size: .72rem; color: var(--muted); text-transform: uppercase; }
-
-/* ─── TEXT PLAYGROUND ─── */
-textarea {
-  width: 100%; min-height: 80px; padding: .6rem;
-  background: var(--bg); border: 1px solid var(--border);
-  border-radius: 8px; color: var(--text); font-size: .9rem; resize: vertical;
+.term-dots{display:flex;gap:6px}
+.term-dots span{width:12px;height:12px;border-radius:50%}
+.td-r{background:#ff5f57}.td-y{background:#febc2e}.td-g{background:#28c840}
+.term-title{color:#787882;font-family:'Consolas','Monaco',monospace;font-size:.8rem;margin-left:.5rem}
+.term-bar .spacer{flex:1}
+.term-body{
+  padding:12px 14px;font-family:'Consolas','Monaco',monospace;
+  font-size:.8rem;color:#b0b0b8;max-height:260px;overflow-y:auto;
+  white-space:pre-wrap;word-break:break-all;
 }
+.log-i{color:#67b7f7}.log-w{color:#e5c07b}.log-e{color:#e06c75}
 
-/* ─── CHART ─── */
-canvas { max-height: 200px; }
+/* ─── Toast ─── */
+.toasts{position:fixed;top:72px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px}
+.toast{
+  padding:10px 18px;border-radius:10px;font-size:.88rem;font-weight:600;
+  box-shadow:0 6px 16px rgba(0,0,0,.12);animation:tIn .25s ease;
+  display:flex;align-items:center;gap:8px;
+}
+.toast-ok{background:var(--green-bg);color:var(--green-text);border:1px solid #a7f3d0}
+.toast-err{background:var(--red-bg);color:var(--red-text);border:1px solid #fecaca}
+.toast-info{background:var(--accent-light);color:var(--accent);border:1px solid #c7d2fe}
+@keyframes tIn{from{transform:translateX(100%);opacity:0}to{transform:none;opacity:1}}
+@keyframes tOut{from{opacity:1}to{opacity:0;transform:translateY(-8px)}}
 
-/* ─── MISC ─── */
-.mt  { margin-top: 1rem; }
-.mb  { margin-bottom: 1rem; }
-.flex { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
-.hidden { display: none !important; }
-hr { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
+.hidden{display:none!important}
+.mt-1{margin-top:.5rem}.mt-2{margin-top:1rem}.mt-3{margin-top:1.5rem}
+.flex{display:flex}.gap-2{gap:.5rem}.gap-3{gap:1rem}
 </style>
 </head>
 <body>
 
-<!-- ═══════════════════════ TOP BAR ═══════════════════════ -->
-<div class="topbar">
-  <span style="font-size:1.4rem">🕶️</span>
-  <h1>Smart Glasses – AI Dashboard</h1>
-  <span class="pill" id="camPill">---</span>
+<!-- ═══════════════ TOP BAR ═══════════════ -->
+<nav class="topbar">
+  <div class="logo">
+    <span class="dot"></span> SmartGlass AI
+  </div>
+  <div class="nav-pills">
+    <button class="pill active" data-p="home">&#127968; Home</button>
+    <button class="pill" data-p="detect">&#128247; Detection</button>
+    <button class="pill" data-p="train">&#128640; Train</button>
+    <button class="pill" data-p="models">&#129520; Models</button>
+  </div>
+  <div class="adapter-badge" id="adapterBadge" onclick="toggleAdapterDD()">
+    <span class="live-dot"></span>
+    <span id="adapterLabel">&#9889; YOLOv4-tiny</span>
+    <span style="font-size:.7rem;color:#a5b4fc">&#9660;</span>
+  </div>
+  <div class="adapter-dropdown" id="adapterDD">
+    <div class="adapter-dd-head">&#128268; Switch Detection Adapter</div>
+    <div class="adapter-opt active" data-m="yolo" onclick="switchAdapter('yolo',this)">
+      <div class="radio"></div>
+      <div class="adapter-opt-text">
+        <strong>&#9889; YOLOv4-tiny</strong>
+        <small>80 COCO classes &middot; fast &amp; accurate</small>
+      </div>
+    </div>
+    <div class="adapter-opt" data-m="ssd" onclick="switchAdapter('ssd',this)">
+      <div class="radio"></div>
+      <div class="adapter-opt-text">
+        <strong>&#128242; MobileNet-SSD</strong>
+        <small>20 VOC classes &middot; ultra lightweight</small>
+      </div>
+    </div>
+  </div>
+</nav>
+<div class="toasts" id="toasts"></div>
+
+<!-- ═══════════════ HOME ═══════════════ -->
+<div class="page on" id="page-home">
+<div class="page-wrap">
+  <div class="hero">
+    <div class="hero-badge">&#10024; AI-Powered Smart Glasses Platform</div>
+    <h1>See the World Through<br><span>Intelligent Eyes</span></h1>
+    <p>Real-time object detection with YOLO &amp; MobileNet-SSD. Upload datasets, train custom models, and deploy &mdash; all from your browser.</p>
+    <div class="flex gap-3" style="justify-content:center">
+      <button class="btn btn-accent" onclick="go('detect')">&#128247; Start Detection</button>
+      <button class="btn btn-ghost" onclick="go('train')">&#128640; Train a Model</button>
+    </div>
+  </div>
+
+  <div class="feat-grid">
+    <div class="card feat">
+      <span class="emoji">&#127909;</span>
+      <h3>Live Camera Detection</h3>
+      <p>Stream your webcam and detect 80+ objects in real-time. Dynamically resizable feed with FPS overlay.</p>
+    </div>
+    <div class="card feat">
+      <span class="emoji">&#129302;</span>
+      <h3>Custom Model Training</h3>
+      <p>Upload image, audio, or text datasets as .zip files. Auto-detects type, trains the right model, and hot-reloads.</p>
+    </div>
+    <div class="card feat">
+      <span class="emoji">&#128260;</span>
+      <h3>Adapter Switching</h3>
+      <p>Hot-swap between YOLOv4-tiny, MobileNet-SSD, and custom-trained models without restarting the server.</p>
+    </div>
+    <div class="card feat">
+      <span class="emoji">&#128421;</span>
+      <h3>Live Server Terminal</h3>
+      <p>Integrated CLI with real-time SSE log streaming. Watch training progress, detection stats, and system events.</p>
+    </div>
+  </div>
+
+  <div class="card about-card">
+    <div class="about-av">AR</div>
+    <div class="about-text">
+      <h4>Akshay Raj</h4>
+      <p>Smart Glasses Project &mdash; Object Detection with OpenCV, YOLOv4, MobileNet-SSD, and PyTorch. Built for wearable AI applications.</p>
+    </div>
+  </div>
+</div>
 </div>
 
-<div class="container">
+<!-- ═══════════════ DETECTION ═══════════════ -->
+<div class="page" id="page-detect">
+<div class="page-wrap">
+  <div class="page-header">
+    <h2>&#128247; Live Detection</h2>
+    <span class="tag" id="detAdapterTag" style="background:var(--accent-light);color:var(--accent)">&#9889; YOLOv4-tiny</span>
+  </div>
 
-<!-- ═══════════════════════ TAB NAV ═══════════════════════ -->
-<div class="tabs" id="tabNav">
-  <button class="active" data-tab="tabLive">🎥 Live Detection</button>
-  <button data-tab="tabTrain">📦 Upload &amp; Train</button>
-  <button data-tab="tabModels">🤖 Models</button>
-  <button data-tab="tabPlayground">🧪 Playground</button>
-</div>
-
-<!-- ─────────────────── TAB 1: LIVE DETECTION ─────────────────── -->
-<div class="tab-panel active" id="tabLive">
-  <div class="grid2">
-    <!-- video -->
-    <div class="card">
-      <h2>🎥 Live Camera Feed</h2>
-      <div class="video-wrapper" id="videoWrap">
-        <div class="video-placeholder" id="videoPlaceholder">
-          <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9.75a2.25 2.25 0 002.25-2.25V7.5a2.25 2.25 0 00-2.25-2.25H4.5A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z"/></svg>
-          <span>Click "Start Camera" to begin</span>
+  <div class="det-grid">
+    <div>
+      <!-- Camera -->
+      <div class="card" style="padding:1rem">
+        <div class="card-label">&#127909; Camera Feed</div>
+        <div class="vid-box" id="vidBox">
+          <div class="vid-ph" id="vidPh">
+            <span class="cam">&#128247;</span>
+            <span>Click <strong>Start Camera</strong> to begin</span>
+          </div>
+          <img id="vidFeed" class="hidden" alt="Live feed">
         </div>
-        <img id="videoFeed" class="hidden" src="" alt="Live feed"/>
-        <div class="video-overlay">
-          <span id="fpsLabel">FPS: --</span>
-          <span id="detCountLabel">Detections: 0</span>
+        <div class="flex gap-2 mt-2">
+          <button class="btn btn-accent" id="camBtn" onclick="toggleCam()">&#9654; Start Camera</button>
         </div>
       </div>
-      <div class="flex mt">
-        <button class="btn btn-green btn-sm" id="btnStartCam" onclick="startCamera()">▶ Start Camera</button>
-        <button class="btn btn-red btn-sm"   id="btnStopCam"  onclick="stopCamera()" disabled>⏹ Stop Camera</button>
+
+      <!-- Image Upload -->
+      <div class="card mt-2">
+        <div class="card-label">&#128444;&#65039; Image Detection</div>
+        <div class="drop-zone" id="imgDZ" onclick="document.getElementById('imgIn').click()">
+          <div class="dz-icon">&#128444;&#65039;</div>
+          <h3>Drop an image or click to browse</h3>
+          <p>JPG, PNG, BMP, TIFF, WebP supported</p>
+          <input type="file" id="imgIn" accept="image/*" class="hidden" onchange="detectImg(this)">
+        </div>
+        <div id="imgResult" class="hidden mt-2"></div>
+      </div>
+
+      <!-- Terminal -->
+      <div class="terminal mt-2">
+        <div class="term-bar">
+          <div class="term-dots"><span class="td-r"></span><span class="td-y"></span><span class="td-g"></span></div>
+          <span class="term-title">&#128421; server logs</span>
+          <span class="spacer"></span>
+          <button class="btn-sm btn-ghost" style="background:#222;color:#888;border:none" onclick="clearTerm()">Clear</button>
+        </div>
+        <div class="term-body" id="termBody"><div class="log-i">Connecting to server...</div></div>
       </div>
     </div>
 
-    <!-- detections sidebar -->
+    <!-- Sidebar -->
+    <div class="side-col">
+      <div class="card">
+        <div class="card-label">&#128202; Statistics</div>
+        <div class="stat-row"><span class="stat-k">&#128268; Adapter</span><span class="stat-v" id="sAdapter">YOLOv4-tiny</span></div>
+        <div class="stat-row"><span class="stat-k">&#9889; FPS</span><span class="stat-v" id="sFps">--</span></div>
+        <div class="stat-row"><span class="stat-k">&#128230; Objects</span><span class="stat-v" id="sObj">0</span></div>
+        <div class="stat-row"><span class="stat-k">&#127909; Camera</span><span class="stat-v" id="sCam">Off</span></div>
+      </div>
+      <div class="card">
+        <div class="card-label">&#9889; FPS Mode</div>
+        <select class="form-input" id="fpsMode" onchange="switchFpsMode(this.value)" style="margin-bottom:.75rem">
+          <option value="ultra">⚡ Ultra (200+ FPS)</option>
+          <option value="high">🚀 High (100+ FPS)</option>
+          <option value="balanced">⚖️ Balanced (30-60 FPS)</option>
+        </select>
+        <div style="font-size:.8rem;color:var(--muted);line-height:1.4">
+          <div id="fpsDesc">Max FPS, detect every 10th frame</div>
+          <div id="fpsStatus" class="mt-1" style="color:var(--accent)">Current: <span id="currentFps">Ultra</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-label">&#127919; Detected Objects</div>
+        <div id="detList"><p style="color:var(--muted);font-size:.85rem">Start camera to see detections</p></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ═══════════════ TRAINING ═══════════════ -->
+<div class="page" id="page-train">
+<div class="page-wrap">
+  <div class="page-header">
+    <h2>&#128640; Upload &amp; Train</h2>
+  </div>
+
+  <div class="train-grid">
+    <div>
+      <!-- Upload -->
+      <div class="card">
+        <div class="card-label">&#128230; Dataset</div>
+        <div id="dzWrap">
+          <div class="drop-zone" id="dsDZ" onclick="document.getElementById('dsIn').click()">
+            <div class="dz-icon">&#128229;</div>
+            <h3>Drop a .zip archive here</h3>
+            <p>Supports image, audio, and text datasets</p>
+            <input type="file" id="dsIn" accept=".zip,.tar,.gz,.tgz" class="hidden" onchange="uploadDS(this)">
+          </div>
+        </div>
+        <div id="dsDisplay" class="hidden mt-2"></div>
+        <div id="uploadProg" class="hidden mt-1">
+          <p style="font-size:.85rem;color:var(--muted)">&#9203; Uploading and extracting...</p>
+          <div class="prog-bar"><div class="prog-fill" style="width:30%"></div></div>
+        </div>
+      </div>
+
+      <!-- Config -->
+      <div class="card mt-2">
+        <div class="card-label">&#9881;&#65039; Configuration</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+          <div class="form-row"><label>Epochs</label><input class="form-input" type="number" id="cfgEp" value="10" min="1" max="200"></div>
+          <div class="form-row"><label>Batch Size</label><input class="form-input" type="number" id="cfgBs" value="32" min="1" max="512"></div>
+          <div class="form-row"><label>Learning Rate</label><input class="form-input" type="number" id="cfgLr" value="0.001" step="0.0001"></div>
+          <div class="form-row"><label>ETA</label><input class="form-input" type="text" id="cfgEta" value="--" readonly></div>
+        </div>
+        <div class="flex gap-2 mt-2">
+          <button class="btn btn-accent" id="trainBtn" onclick="startTrain()" disabled>&#128640; Start Training</button>
+          <button class="btn btn-danger hidden" id="clearDsBtn" onclick="clearDS()">&#128465; Clear Dataset</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Progress -->
     <div>
       <div class="card">
-        <h2>📋 Live Detections</h2>
-        <div class="det-list" id="detList">
-          <p style="color:var(--muted);font-size:.85rem">No detections yet – start the camera.</p>
-        </div>
+        <div class="card-label">&#128200; Training Progress</div>
+        <div id="trainStat"><p style="color:var(--muted);font-size:.85rem">Upload a dataset to begin</p></div>
+        <div class="prog-bar hidden" id="trainProg"><div class="prog-fill" id="trainFill" style="width:0%"></div></div>
       </div>
-      <div class="card">
-        <h2>📊 Statistics</h2>
-        <div class="stats">
-          <div class="stat"><span class="val" id="statFps">--</span><span class="lbl">FPS</span></div>
-          <div class="stat"><span class="val" id="statDet">0</span><span class="lbl">Objects</span></div>
-          <div class="stat"><span class="val" id="statCustom">--</span><span class="lbl">Custom Model</span></div>
-        </div>
+      <div class="card mt-2">
+        <div class="card-label">&#128202; Training Chart</div>
+        <div style="position:relative;height:220px"><canvas id="trainChart"></canvas></div>
       </div>
-      <div class="card">
-        <h2>ℹ️ Model Info</h2>
-        <p style="font-size:.85rem;color:var(--muted)">
-          <strong>Default:</strong> <span id="defaultDetectorInfo">Loading…</span><br>
-          <strong>Custom:</strong> <span id="customModelInfo">None loaded</span><br>
-          Models hot-reload every 3 seconds automatically.
-        </p>
+      <!-- Adapter status after training -->
+      <div class="card mt-2 hidden" id="trainAdapterCard">
+        <div class="card-label">&#128268; Active Adapter After Training</div>
+        <div id="trainAdapterInfo"></div>
       </div>
     </div>
   </div>
 </div>
-
-<!-- ─────────────────── TAB 2: UPLOAD & TRAIN ─────────────────── -->
-<div class="tab-panel" id="tabTrain">
-  <!-- upload -->
-  <div class="card" id="uploadCard">
-    <h2>📦 Upload Dataset</h2>
-    <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
-      <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 16V4m0 0l-4 4m4-4l4 4M4 14v4a2 2 0 002 2h12a2 2 0 002-2v-4"/></svg>
-      <p><strong>Click or drag-and-drop</strong> a dataset archive</p>
-      <p style="font-size:.78rem;color:var(--muted)">Supports .zip, .tar.gz &mdash; Kaggle, Roboflow, or custom datasets. See Docs tab for format details.</p>
-      <input type="file" id="fileInput" accept=".zip,.tar,.tar.gz,.tgz,.gz,.bz2,.xz"/>
-    </div>
-    <div id="uploadMsg" class="mt"></div>
-  </div>
-
-  <!-- config (shown after upload) -->
-  <div class="card hidden" id="cfgCard">
-    <h2>⚙️ Training Configuration</h2>
-    <div class="flex mb">
-      <span>Detected type:</span>
-      <span class="type-tag" id="cfgTypeTag">—</span>
-      <span style="color:var(--muted);font-size:.82rem" id="cfgPath"></span>
-    </div>
-    <div class="form-grid">
-      <div><label>Epochs</label><input id="cfgEpochs" type="number" value="10" min="1"/></div>
-      <div><label>Batch Size</label><input id="cfgBatch" type="number" value="16" min="1"/></div>
-      <div><label>Learning Rate</label><input id="cfgLR" type="number" value="0.001" step="0.0001" min="0.00001"/></div>
-      <div><label>Force Type</label>
-        <select id="cfgForce"><option value="">Auto</option><option value="image">Image</option><option value="voice">Voice</option><option value="text">Text</option></select>
-      </div>
-    </div>
-    <button class="btn btn-primary" id="btnTrain" onclick="startTraining()">🚀 Start Training</button>
-  </div>
-
-  <!-- progress (shown during/after training) -->
-  <div class="card hidden" id="progressCard">
-    <h2>📈 Training Progress <span class="badge idle" id="trainBadge">idle</span></h2>
-    <p id="trainMsg" style="font-size:.88rem;color:var(--muted);margin-bottom:.4rem"></p>
-    <div class="progress-bar"><div class="fill" id="trainFill" style="width:0%"></div></div>
-    <div class="stats" style="font-size:.85rem">
-      <div class="stat"><span class="val" id="trEpoch">0/0</span><span class="lbl">Epoch</span></div>
-      <div class="stat"><span class="val" id="trLoss">—</span><span class="lbl">Loss</span></div>
-      <div class="stat"><span class="val" id="trAcc">—</span><span class="lbl">Accuracy</span></div>
-      <div class="stat"><span class="val" id="trPct">0%</span><span class="lbl">Progress</span></div>
-    </div>
-    <canvas id="trainChart" class="mt"></canvas>
-    <h3 class="mt">Training Log</h3>
-    <div class="log" id="trainLog"></div>
-  </div>
 </div>
 
-<!-- ─────────────────── TAB 3: MODELS ─────────────────── -->
-<div class="tab-panel" id="tabModels">
-
-  <!-- Live Model Status -->
-  <div class="card">
-    <h2>🟢 Live Model Status</h2>
-    <div id="liveModelStatus" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;margin-top:.6rem">
-      <p style="color:var(--muted)">Loading…</p>
-    </div>
-    <div class="flex mt">
-      <button class="btn btn-ghost btn-sm" onclick="fetchModels()">🔄 Refresh</button>
-      <button class="btn btn-primary btn-sm" onclick="forceReload()">⚡ Force Hot-Reload</button>
-    </div>
+<!-- ═══════════════ MODELS ═══════════════ -->
+<div class="page" id="page-models">
+<div class="page-wrap">
+  <div class="page-header">
+    <h2>&#129520; Models</h2>
+    <span style="flex:1"></span>
+    <button class="btn btn-ghost" onclick="loadModels()">&#128260; Reload</button>
   </div>
-
-  <!-- Model Details Table -->
-  <div class="card">
-    <h2>📋 Model Details</h2>
-    <table>
-      <thead><tr><th>Type</th><th>Classes</th><th>Accuracy</th><th>Trained At</th><th>Status</th></tr></thead>
-      <tbody id="modelsTbody">
-        <tr><td colspan="5" style="color:var(--muted)">Loading…</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <!-- Training History / Log -->
-  <div class="card">
-    <h2>📜 Training History</h2>
-    <div id="trainHistoryLog" class="log" style="max-height:250px">
-      <p style="color:var(--muted)">No training history yet.</p>
-    </div>
-  </div>
-
-  <!-- What To Do After Training -->
-  <div class="card">
-    <h2>✅ After Training – What's Next?</h2>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;font-size:.88rem;color:var(--muted)">
-      <div style="background:var(--bg);border-radius:10px;padding:1rem">
-        <h3 style="color:var(--green);margin-bottom:.5rem">🎉 Training Succeeded</h3>
-        <ol style="padding-left:1.2rem;line-height:2">
-          <li><strong>Auto hot-reload</strong> — model loads within 3 seconds, no restart needed</li>
-          <li>Go to <strong>Live Detection</strong> tab and click <strong>Start Camera</strong></li>
-          <li>Point camera at objects your model was trained on</li>
-          <li>Custom detections appear with <span style="color:#eab308">[Custom]</span> labels in yellow</li>
-          <li>Upload a <strong>new dataset</strong> anytime to retrain — old model is replaced</li>
-        </ol>
-      </div>
-      <div style="background:var(--bg);border-radius:10px;padding:1rem">
-        <h3 style="color:var(--accent);margin-bottom:.5rem">💡 Tips for Better Results</h3>
-        <ul style="padding-left:1.2rem;line-height:2">
-          <li>Use <strong>3+ classes</strong> for more precise per-object detection</li>
-          <li>Use <strong>200+ images per class</strong> for better accuracy</li>
-          <li>Include varied backgrounds, angles, and lighting</li>
-          <li>Binary models (1 class + background) work best for scene classification</li>
-          <li>Multi-class models (3+) work best for per-object detection</li>
-          <li>Increase <strong>epochs</strong> (15-20) if accuracy is below 80%</li>
-        </ul>
-      </div>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>📖 Dataset Format Guide</h2>
-    <p style="font-size:.85rem;color:var(--muted);margin-bottom:.8rem">
-      Upload datasets from <strong>Kaggle, Roboflow, or custom</strong> &mdash; all common formats are auto-detected.
-      Accepts <strong>.zip</strong> and <strong>.tar.gz</strong> archives.
-    </p>
-    <div class="grid2">
-      <div>
-        <h3>1. Classification Folders</h3>
-        <pre style="background:var(--bg);padding:.8rem;border-radius:8px;font-size:.78rem;color:var(--muted);overflow-x:auto">dataset.zip
-  ├── cat/
-  │   ├── cat001.jpg
-  │   └── cat002.jpg
-  ├── dog/
-  │   └── dog001.jpg
-  └── bird/
-      └── bird001.jpg</pre>
-      </div>
-      <div>
-        <h3>2. CSV-Labeled (Kaggle-style)</h3>
-        <pre style="background:var(--bg);padding:.8rem;border-radius:8px;font-size:.78rem;color:var(--muted);overflow-x:auto">dataset.zip
-  ├── train/
-  │   ├── img001.jpg
-  │   └── img002.jpg
-  ├── test/
-  │   └── img003.jpg
-  ├── Training_set.csv  ← filename,label
-  └── Testing_set.csv</pre>
-        <p style="font-size:.7rem;color:var(--muted);margin-top:.2rem">CSV columns: filename + label (also accepts: image, class, category, species, target, etc.)</p>
-      </div>
-      <div>
-        <h3>3. YOLO Format</h3>
-        <pre style="background:var(--bg);padding:.8rem;border-radius:8px;font-size:.78rem;color:var(--muted);overflow-x:auto">dataset.zip
-  ├── data.yaml         ← class names
-  ├── train/
-  │   ├── images/
-  │   │   └── img001.jpg
-  │   └── labels/
-  │       └── img001.txt
-  └── valid/
-      ├── images/
-      └── labels/</pre>
-        <p style="font-size:.7rem;color:var(--muted);margin-top:.2rem">YOLO txt: <code>class_id x_center y_center width height</code> (normalized)</p>
-      </div>
-      <div>
-        <h3>4. COCO JSON</h3>
-        <pre style="background:var(--bg);padding:.8rem;border-radius:8px;font-size:.78rem;color:var(--muted);overflow-x:auto">dataset.zip
-  ├── images/
-  │   ├── img001.jpg
-  │   └── img002.jpg
-  └── _annotations.coco.json</pre>
-        <p style="font-size:.7rem;color:var(--muted);margin-top:.2rem">Standard COCO JSON with images, annotations, categories arrays</p>
-      </div>
-      <div>
-        <h3>5. Pascal VOC (XML)</h3>
-        <pre style="background:var(--bg);padding:.8rem;border-radius:8px;font-size:.78rem;color:var(--muted);overflow-x:auto">dataset.zip
-  ├── images/
-  │   └── photo001.jpg
-  └── annotations/
-      └── photo001.xml</pre>
-      </div>
-      <div>
-        <h3>6. Train/Test Splits</h3>
-        <pre style="background:var(--bg);padding:.8rem;border-radius:8px;font-size:.78rem;color:var(--muted);overflow-x:auto">dataset.zip
-  ├── train/
-  │   ├── cat/
-  │   │   └── cat001.jpg
-  │   └── dog/
-  │       └── dog001.jpg
-  └── test/
-      ├── cat/
-      └── dog/</pre>
-      </div>
-      <div>
-        <h3>Voice / Audio Dataset</h3>
-        <pre style="background:var(--bg);padding:.8rem;border-radius:8px;font-size:.78rem;color:var(--muted);overflow-x:auto">audio.zip
-  ├── hello/
-  │   └── hello_01.wav
-  └── stop/
-      └── stop_01.wav</pre>
-      </div>
-      <div>
-        <h3>Text Dataset (CSV)</h3>
-        <pre style="background:var(--bg);padding:.8rem;border-radius:8px;font-size:.78rem;color:var(--muted);overflow-x:auto">text.zip
-  └── data.csv
-
-CSV: text,label
-  "Great!",positive
-  "Bad.",negative</pre>
-      </div>
-    </div>
-  </div>
+  <div class="models-grid" id="modelsGrid"><div class="card"><p style="color:var(--muted)">Loading...</p></div></div>
+</div>
 </div>
 
-<!-- ─────────────────── TAB 4: PLAYGROUND ─────────────────── -->
-<div class="tab-panel" id="tabPlayground">
-  <div class="grid2">
-    <div class="card">
-      <h2>💬 Text Classification</h2>
-      <p style="font-size:.85rem;color:var(--muted);margin-bottom:.6rem">
-        Type a sentence and the trained text model will classify it.
-      </p>
-      <textarea id="pgText" placeholder="Enter text to classify…"></textarea>
-      <button class="btn btn-primary btn-sm mt" onclick="classifyText()">Classify</button>
-      <div id="pgResult" class="mt"></div>
-    </div>
-    <div class="card">
-      <h2>🔌 API Reference</h2>
-      <table style="font-size:.8rem">
-        <tr><td><code>GET</code></td><td>/api/video/feed</td><td>MJPEG stream</td></tr>
-        <tr><td><code>POST</code></td><td>/api/video/start</td><td>Start camera</td></tr>
-        <tr><td><code>POST</code></td><td>/api/video/stop</td><td>Stop camera</td></tr>
-        <tr><td><code>GET</code></td><td>/api/video/detections</td><td>Current detections JSON</td></tr>
-        <tr><td><code>POST</code></td><td>/api/upload</td><td>Upload dataset (.zip, .tar.gz)</td></tr>
-        <tr><td><code>POST</code></td><td>/api/train</td><td>Start training</td></tr>
-        <tr><td><code>GET</code></td><td>/api/train/status</td><td>Training status JSON</td></tr>
-        <tr><td><code>GET</code></td><td>/api/train/status/stream</td><td>SSE live stream</td></tr>
-        <tr><td><code>GET</code></td><td>/api/models</td><td>All models info</td></tr>
-        <tr><td><code>POST</code></td><td>/api/models/reload</td><td>Force hot-reload</td></tr>
-        <tr><td><code>POST</code></td><td>/api/classify/text</td><td>Classify text input</td></tr>
-      </table>
-    </div>
-  </div>
-</div>
 
-</div><!-- .container -->
-
-<!-- Chart.js CDN -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
-
+<!-- ═══════════════ SCRIPT ═══════════════ -->
 <script>
-/* ═══════════════════════════════════════════════════════════════════
-   CLIENT-SIDE JAVASCRIPT  –  Single-page controller
-   ═══════════════════════════════════════════════════════════════════ */
+/* ──── State ──── */
+let camOn=false, detTimer=null, logES=null, trainES=null, dsPath=null, chart=null;
+const hist={labels:[],loss:[],acc:[]};
 
-// ─── TAB NAVIGATION ──────────────────────────────────────────────
-document.querySelectorAll('#tabNav button').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('#tabNav button').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-    btn.classList.add('active');
-    document.getElementById(btn.dataset.tab).classList.add('active');
+/* ──── Navigation ──── */
+document.querySelectorAll('.pill').forEach(b=>b.addEventListener('click',()=>go(b.dataset.p)));
+function go(p){
+  document.querySelectorAll('.page').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('.pill').forEach(x=>x.classList.remove('active'));
+  const pg=document.getElementById('page-'+p);if(pg)pg.classList.add('on');
+  const tb=document.querySelector(`.pill[data-p="${p}"]`);if(tb)tb.classList.add('active');
+  if(p==='detect')initLogs();
+  if(p==='models')loadModels();
+}
+
+/* ──── Toast ──── */
+function toast(msg,type='info'){
+  const t=document.createElement('div');
+  t.className='toast toast-'+(type==='error'?'err':type==='success'?'ok':'info');
+  t.textContent=msg;
+  document.getElementById('toasts').appendChild(t);
+  setTimeout(()=>{t.style.animation='tOut .3s ease';setTimeout(()=>t.remove(),300)},3500);
+}
+
+/* ──── Adapter switcher ──── */
+function toggleAdapterDD(){document.getElementById('adapterDD').classList.toggle('open')}
+document.addEventListener('click',e=>{if(!e.target.closest('.adapter-badge')&&!e.target.closest('.adapter-dropdown'))document.getElementById('adapterDD').classList.remove('open')});
+
+async function switchAdapter(m,el){
+  try{
+    const r=await fetch('/api/models/switch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:m})});
+    const d=await r.json();
+    if(d.ok){
+      setAdapterUI(d.active);
+      document.querySelectorAll('.adapter-opt').forEach(o=>o.classList.remove('active'));
+      el.classList.add('active');
+      toast('Switched to '+d.active,'success');
+    }else toast(d.error||'Switch failed','error');
+  }catch(e){toast('Network error','error')}
+  document.getElementById('adapterDD').classList.remove('open');
+}
+function setAdapterUI(name){
+  const emoji=name.includes('YOLO')?'\u26A1':'\uD83D\uDCF1';
+  document.getElementById('adapterLabel').innerHTML=emoji+' '+name;
+  document.getElementById('sAdapter').textContent=name;
+  document.getElementById('detAdapterTag').innerHTML=emoji+' '+name;
+}
+
+/* ──── Camera ──── */
+async function toggleCam(){
+  if(camOn){
+    await fetch('/api/video/stop',{method:'POST'});
+    document.getElementById('vidFeed').classList.add('hidden');
+    document.getElementById('vidPh').classList.remove('hidden');
+    document.getElementById('camBtn').innerHTML='\u25B6 Start Camera';
+    document.getElementById('camBtn').className='btn btn-accent';
+    document.getElementById('sCam').textContent='Off';
+    document.getElementById('sFps').textContent='--';
+    document.getElementById('sObj').textContent='0';
+    document.getElementById('detList').innerHTML='<p style="color:var(--muted);font-size:.85rem">Camera stopped</p>';
+    camOn=false;if(detTimer){clearInterval(detTimer);detTimer=null}
+  }else{
+    try{
+      await fetch('/api/video/start',{method:'POST'});
+      const f=document.getElementById('vidFeed');f.src='/api/video/feed?t='+Date.now();
+      f.classList.remove('hidden');document.getElementById('vidPh').classList.add('hidden');
+      document.getElementById('camBtn').innerHTML='\u23F9 Stop Camera';
+      document.getElementById('camBtn').className='btn btn-danger';
+      document.getElementById('sCam').textContent='Live';
+      camOn=true;detTimer=setInterval(pollDets,600);
+      toast('Camera started','success');
+    }catch(e){toast('Cannot open camera','error')}
+  }
+}
+async function pollDets(){
+  try{
+    const r=await fetch('/api/video/detections');const d=await r.json();
+    document.getElementById('sFps').textContent=d.fps||'--';
+    const dets=d.detections||[];
+    document.getElementById('sObj').textContent=dets.length;
+    if(!dets.length){document.getElementById('detList').innerHTML='<p style="color:var(--muted);font-size:.85rem">No objects detected</p>';return}
+    document.getElementById('detList').innerHTML=dets.map(x=>`<div class="det-item"><span class="det-name">${x.label}</span><span class="det-conf">${(x.confidence*100).toFixed(1)}%</span></div>`).join('');
+  }catch(e){}
+}
+
+/* ──── Image Detection ──── */
+async function detectImg(inp){
+  if(!inp.files[0])return;
+  const fd=new FormData();fd.append('file',inp.files[0]);
+  const el=document.getElementById('imgResult');
+  el.innerHTML='<p style="color:var(--muted)">&#9203; Detecting...</p>';el.classList.remove('hidden');
+  try{
+    const r=await fetch('/api/detect/image',{method:'POST',body:fd});const d=await r.json();
+    if(d.ok){el.innerHTML=`<img src="data:image/jpeg;base64,${d.image}" style="border-radius:10px"><p class="mt-1" style="font-size:.88rem;font-weight:600">\u2705 ${d.total} object(s) detected</p>`;toast(d.total+' object(s) found','success')}
+    else el.innerHTML=`<p style="color:var(--red)">${d.error}</p>`;
+  }catch(e){el.innerHTML='<p style="color:var(--red)">Upload failed</p>'}
+  inp.value='';
+}
+
+/* ──── Logs ──── */
+function initLogs(){
+  if(logES)return;
+  fetch('/api/logs').then(r=>r.json()).then(d=>{
+    const b=document.getElementById('termBody');b.innerHTML='';
+    (d.lines||[]).forEach(l=>addLog(l));
   });
+  logES=new EventSource('/api/logs/stream');
+  logES.onmessage=e=>addLog(JSON.parse(e.data));
+}
+function addLog(l){
+  const b=document.getElementById('termBody'),d=document.createElement('div');
+  d.className=l.includes('[ERROR]')||l.includes('[CRITICAL]')?'log-e':l.includes('[WARNING]')?'log-w':'log-i';
+  d.textContent=l;b.appendChild(d);b.scrollTop=b.scrollHeight;
+  while(b.children.length>500)b.removeChild(b.firstChild);
+}
+function clearTerm(){document.getElementById('termBody').innerHTML='<div class="log-i">Terminal cleared</div>'}
+
+/* ──── Dataset Upload ──── */
+async function uploadDS(inp){
+  if(!inp.files[0])return;
+  const fd=new FormData();fd.append('file',inp.files[0]);
+  document.getElementById('uploadProg').classList.remove('hidden');
+  document.getElementById('dzWrap').classList.add('hidden');
+  try{
+    const r=await fetch('/api/upload',{method:'POST',body:fd});const d=await r.json();
+    document.getElementById('uploadProg').classList.add('hidden');
+    if(d.ok){
+      dsPath=d.dataset_path;
+      const typeEmoji=d.dataset_type==='image'?'\uD83D\uDDBC\uFE0F':d.dataset_type==='audio'?'\uD83C\uDFA4':'\uD83D\uDCDD';
+      document.getElementById('dsDisplay').innerHTML=`
+        <div class="ds-badge">
+          <div class="ds-ico">${typeEmoji}</div>
+          <div class="ds-txt">
+            <strong>${d.dataset_name||'Dataset'}</strong>
+            <small>${d.dataset_type} dataset &middot; ${d.num_files} files &middot; ${d.num_classes} classes</small>
+          </div>
+        </div>
+        <p class="mt-1" style="font-size:.82rem;color:var(--muted)">\uD83D\uDD17 Adapter: <strong>${document.getElementById('sAdapter').textContent}</strong> (switch anytime from the top bar)</p>
+      `;
+      document.getElementById('dsDisplay').classList.remove('hidden');
+      if(d.rec_epochs)document.getElementById('cfgEp').value=d.rec_epochs;
+      if(d.rec_batch_size)document.getElementById('cfgBs').value=d.rec_batch_size;
+      if(d.eta_display)document.getElementById('cfgEta').value=d.eta_display;
+      document.getElementById('trainBtn').disabled=false;
+      document.getElementById('clearDsBtn').classList.remove('hidden');
+      toast('\u2705 Dataset uploaded: '+(d.dataset_name||d.dataset_type),'success');
+    }else{
+      document.getElementById('dzWrap').classList.remove('hidden');
+      toast(d.error||'Upload failed','error');
+    }
+  }catch(e){
+    document.getElementById('uploadProg').classList.add('hidden');
+    document.getElementById('dzWrap').classList.remove('hidden');
+    toast('Upload failed','error');
+  }
+  inp.value='';
+}
+async function clearDS(){
+  if(dsPath)await fetch('/api/upload/clear',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dataset_path:dsPath})});
+  dsPath=null;
+  document.getElementById('dsDisplay').classList.add('hidden');
+  document.getElementById('dzWrap').classList.remove('hidden');
+  document.getElementById('trainBtn').disabled=true;
+  document.getElementById('clearDsBtn').classList.add('hidden');
+  document.getElementById('cfgEta').value='--';
+  toast('Dataset cleared','info');
+}
+
+/* ──── Training ──── */
+async function startTrain(){
+  if(!dsPath){toast('Upload a dataset first','error');return}
+  try{
+    const r=await fetch('/api/train',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dataset_path:dsPath,epochs:document.getElementById('cfgEp').value,batch_size:document.getElementById('cfgBs').value,lr:document.getElementById('cfgLr').value})});
+    const d=await r.json();
+    if(d.ok){
+      document.getElementById('trainBtn').disabled=true;
+      document.getElementById('trainBtn').innerHTML='\u23F3 Training...';
+      document.getElementById('trainProg').classList.remove('hidden');
+      hist.labels=[];hist.loss=[];hist.acc=[];initChart();startTrainStream();
+      toast('\uD83D\uDE80 Training started','success');
+    }else toast(d.error||'Failed','error');
+  }catch(e){toast('Network error','error')}
+}
+function startTrainStream(){
+  if(trainES)trainES.close();
+  trainES=new EventSource('/api/train/status/stream');
+  trainES.onmessage=e=>updateTrain(JSON.parse(e.data));
+}
+function updateTrain(d){
+  const el=document.getElementById('trainStat');
+  if(d.status==='training'){
+    const pct=d.total_epochs>0?Math.round(d.epoch/d.total_epochs*100):0;
+    el.innerHTML=`
+      <div class="stat-row"><span class="stat-k">Status</span><span class="stat-v">\uD83D\uDD25 Training</span></div>
+      <div class="stat-row"><span class="stat-k">Epoch</span><span class="stat-v">${d.epoch} / ${d.total_epochs}</span></div>
+      ${d.loss!=null?`<div class="stat-row"><span class="stat-k">Loss</span><span class="stat-v">${Number(d.loss).toFixed(4)}</span></div>`:''}
+      ${d.accuracy!=null?`<div class="stat-row"><span class="stat-k">Accuracy</span><span class="stat-v">${(Number(d.accuracy)*100).toFixed(1)}%</span></div>`:''}
+    `;
+    document.getElementById('trainFill').style.width=pct+'%';
+    if(d.epoch>0&&d.loss!=null){
+      const lbl='E'+d.epoch;
+      if(!hist.labels.includes(lbl)){hist.labels.push(lbl);hist.loss.push(Number(d.loss));hist.acc.push(d.accuracy!=null?Number(d.accuracy)*100:null);if(chart)chart.update()}
+    }
+  }else if(d.status==='done'){
+    el.innerHTML='<div style="text-align:center;padding:1rem"><span style="font-size:2rem">\u2705</span><p style="font-weight:700;margin-top:.5rem">Training Complete</p></div>';
+    document.getElementById('trainBtn').disabled=false;
+    document.getElementById('trainBtn').innerHTML='\uD83D\uDE80 Start Training';
+    // Show adapter info after training
+    const ac=document.getElementById('trainAdapterCard');
+    ac.classList.remove('hidden');
+    const adName=document.getElementById('sAdapter').textContent;
+    document.getElementById('trainAdapterInfo').innerHTML=`
+      <div class="ds-badge" style="background:var(--green-bg);border-color:#a7f3d0">
+        <div class="ds-ico" style="background:var(--green)">\u2705</div>
+        <div class="ds-txt">
+          <strong>Model ready &middot; Hot-reloaded</strong>
+          <small>Active adapter: <strong>${adName}</strong> + new custom model</small>
+        </div>
+      </div>
+    `;
+    toast('\u2705 Training complete! Model hot-reloaded.','success');
+    if(trainES){trainES.close();trainES=null}
+  }else if(d.status==='error'){
+    el.innerHTML=`<p style="color:var(--red)">\u274C ${d.message||'Training error'}</p>`;
+    document.getElementById('trainBtn').disabled=false;
+    document.getElementById('trainBtn').innerHTML='\uD83D\uDE80 Start Training';
+    if(trainES){trainES.close();trainES=null}
+  }
+}
+function initChart(){
+  const ctx=document.getElementById('trainChart').getContext('2d');
+  if(chart)chart.destroy();
+  chart=new Chart(ctx,{type:'line',data:{labels:hist.labels,datasets:[
+    {label:'Loss',data:hist.loss,borderColor:'#4f46e5',backgroundColor:'rgba(79,70,229,.1)',tension:.3,fill:true,yAxisID:'y'},
+    {label:'Accuracy %',data:hist.acc,borderColor:'#10b981',backgroundColor:'rgba(16,185,129,.1)',tension:.3,fill:false,yAxisID:'y1'}
+  ]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{position:'bottom',labels:{usePointStyle:true,boxWidth:6}}},scales:{y:{position:'left',title:{display:true,text:'Loss'},beginAtZero:true},y1:{position:'right',title:{display:true,text:'Acc %'},beginAtZero:true,max:100,grid:{drawOnChartArea:false}}}}});
+}
+
+/* ──── Models Page ──── */
+async function loadModels(){
+  const g=document.getElementById('modelsGrid');
+  g.innerHTML='<div class="card"><p style="color:var(--muted)">\u23F3 Loading...</p></div>';
+  try{
+    const[mr,hr]=await Promise.all([fetch('/api/models'),fetch('/api/models/history')]);
+    const models=await mr.json(),history=await hr.json();
+    g.innerHTML='';
+    if(models.ssd){
+      const s=models.ssd;
+      const card=document.createElement('div');card.className='card';
+      card.innerHTML=`
+        <div class="m-head">
+          <div class="m-ico" style="background:var(--accent-light);color:var(--accent)">${s.detector&&s.detector.includes('YOLO')?'\u26A1':'\uD83D\uDCF1'}</div>
+          <h3>${s.detector||'Detector'}</h3>
+        </div>
+        <div class="m-meta">
+          <span>\uD83C\uDFAF Type: Object Detection</span>
+          <span>\uD83D\uDCCA Classes: ${Array.isArray(s.classes)?s.classes.length:'--'}</span>
+          <span>Status: ${s.loaded?'<span class="badge badge-on">\u2705 Active</span>':'<span class="badge badge-off">Inactive</span>'}</span>
+        </div>
+      `;g.appendChild(card);
+    }
+    for(const item of history){
+      const card=document.createElement('div');card.className='card';
+      const tl=(item.type||'custom').charAt(0).toUpperCase()+(item.type||'').slice(1);
+      const emoji=item.type==='image'?'\uD83D\uDDBC\uFE0F':item.type==='voice'?'\uD83C\uDFA4':'\uD83D\uDCDD';
+      card.innerHTML=`
+        <div class="m-head">
+          <div class="m-ico" style="background:var(--green-bg);color:var(--green-text)">${emoji}</div>
+          <h3>${tl} Model</h3>
+        </div>
+        <div class="m-meta">
+          <span>\uD83C\uDFF7\uFE0F Classes: ${Array.isArray(item.classes)?item.classes.join(', '):'--'}</span>
+          ${item.accuracy!=null?`<span>\uD83C\uDFAF Accuracy: ${(item.accuracy*100).toFixed(1)}%</span>`:''}
+          ${item.trained_at?`<span>\uD83D\uDCC5 Trained: ${item.trained_at}</span>`:''}
+          <span>Status: <span class="badge badge-on">\u2705 Ready</span></span>
+        </div>
+      `;g.appendChild(card);
+    }
+    for(const mt of['image','voice','text']){
+      if(!models[mt]&&!history.find(h=>h.type===mt)){
+        const card=document.createElement('div');card.className='card';
+        const label=mt.charAt(0).toUpperCase()+mt.slice(1);
+        const emoji=mt==='image'?'\uD83D\uDDBC\uFE0F':mt==='voice'?'\uD83C\uDFA4':'\uD83D\uDCDD';
+        card.innerHTML=`
+          <div class="m-head">
+            <div class="m-ico" style="background:var(--bg);color:var(--muted)">${emoji}</div>
+            <h3>${label} Model</h3>
+          </div>
+          <div class="m-meta"><span>Status: <span class="badge badge-off">No model trained</span></span></div>
+        `;g.appendChild(card);
+      }
+    }
+    if(!g.children.length)g.innerHTML='<div class="card"><p style="color:var(--muted)">No models found</p></div>';
+  }catch(e){g.innerHTML='<div class="card"><p style="color:var(--red)">Failed to load</p></div>'}
+}
+
+/* ──── Drag & drop ──── */
+['dsDZ','imgDZ'].forEach(id=>{
+  const z=document.getElementById(id);if(!z)return;
+  z.addEventListener('dragover',e=>{e.preventDefault();z.classList.add('over')});
+  z.addEventListener('dragleave',()=>z.classList.remove('over'));
+  z.addEventListener('drop',e=>{e.preventDefault();z.classList.remove('over');if(e.dataTransfer.files.length){const i=z.querySelector('input[type="file"]');i.files=e.dataTransfer.files;i.dispatchEvent(new Event('change'))}});
 });
 
-// ─── STATE ───────────────────────────────────────────────────────
-let dsPath = null, dsType = null, chart = null, sse = null, detPoll = null;
-
-// ─── CAMERA ──────────────────────────────────────────────────────
-function startCamera(){
-  fetch('/api/video/start',{method:'POST'}).then(r=>r.json()).then(j=>{
-    if(j.ok){
-      document.getElementById('videoPlaceholder').classList.add('hidden');
-      const img = document.getElementById('videoFeed');
-      img.src = '/api/video/feed?' + Date.now();
-      img.classList.remove('hidden');
-      document.getElementById('btnStartCam').disabled = true;
-      document.getElementById('btnStopCam').disabled  = false;
-      setCamPill(true);
-      startDetPoll();
-    }
-  });
-}
-
-function stopCamera(){
-  fetch('/api/video/stop',{method:'POST'}).then(()=>{
-    document.getElementById('videoFeed').classList.add('hidden');
-    document.getElementById('videoPlaceholder').classList.remove('hidden');
-    document.getElementById('btnStartCam').disabled = false;
-    document.getElementById('btnStopCam').disabled  = true;
-    setCamPill(false);
-    stopDetPoll();
-  });
-}
-
-function setCamPill(on){
-  const p = document.getElementById('camPill');
-  p.textContent = on ? 'CAMERA ON' : 'CAMERA OFF';
-  p.className = 'pill ' + (on ? 'online' : 'offline');
-}
-setCamPill(false);
-
-// ─── DETECTION POLL ──────────────────────────────────────────────
-function startDetPoll(){
-  stopDetPoll();
-  detPoll = setInterval(()=>{
-    fetch('/api/video/detections').then(r=>r.json()).then(d=>{
-      document.getElementById('fpsLabel').textContent = 'FPS: ' + d.fps;
-      document.getElementById('statFps').textContent  = d.fps;
-      document.getElementById('detCountLabel').textContent = 'Detections: ' + d.detections.length;
-      document.getElementById('statDet').textContent = d.detections.length;
-
-      const list = document.getElementById('detList');
-      if(!d.detections.length){
-        list.innerHTML = '<p style="color:var(--muted);font-size:.85rem">No objects detected.</p>';
-        return;
-      }
-      list.innerHTML = d.detections.map(det => {
-        const col = det.color ? `rgb(${det.color.map(Math.round).join(',')})` : 'var(--accent)';
-        return `<div class="det-item">
-          <span class="det-dot" style="background:${col}"></span>
-          <span>${det.label}</span>
-          <span class="det-conf">${(det.confidence*100).toFixed(1)}%</span>
-        </div>`;
-      }).join('');
-
-      // custom model indicator
-      const custom = d.detections.find(x => x.label.startsWith('[Custom]'));
-      document.getElementById('statCustom').textContent = custom ? '✓ Active' : '—';
-      document.getElementById('customModelInfo').textContent = custom ? custom.label : 'None loaded';
-    }).catch(()=>{});
-  }, 500);
-}
-
-function stopDetPoll(){ if(detPoll) clearInterval(detPoll); detPoll=null; }
-
-// ─── UPLOAD ──────────────────────────────────────────────────────
-const dz = document.getElementById('dropZone');
-const fi = document.getElementById('fileInput');
-['dragenter','dragover'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.add('drag'); }));
-['dragleave','drop'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.remove('drag'); }));
-dz.addEventListener('drop', ev => { if(ev.dataTransfer.files.length) uploadFile(ev.dataTransfer.files[0]); });
-fi.addEventListener('change', () => { if(fi.files.length) uploadFile(fi.files[0]); });
-
-async function uploadFile(file){
-  const msg = document.getElementById('uploadMsg');
-  msg.innerHTML = '<span style="color:var(--accent)">⏳ Uploading… please wait</span>';
-  const fd = new FormData(); fd.append('file', file);
-  try {
-    const r = await fetch('/api/upload',{method:'POST',body:fd});
-    const j = await r.json();
-    if(j.ok){
-      dsPath = j.dataset_path; dsType = j.dataset_type;
-      msg.innerHTML = `<span style="color:var(--green)">✅ ${j.message}</span>`;
-      showConfig();
-    } else {
-      msg.innerHTML = `<span style="color:var(--red)">❌ ${j.error}</span>`;
-    }
-  } catch(e){
-    msg.innerHTML = `<span style="color:var(--red)">Upload failed: ${e.message}</span>`;
-  }
-}
-
-function showConfig(){
-  const cc = document.getElementById('cfgCard'); cc.classList.remove('hidden');
-  const tag = document.getElementById('cfgTypeTag');
-  tag.textContent = dsType; tag.className = 'type-tag ' + dsType;
-  document.getElementById('cfgPath').textContent = dsPath;
-}
-
-// ─── TRAINING ────────────────────────────────────────────────────
-async function startTraining(){
-  const btn = document.getElementById('btnTrain'); btn.disabled = true;
-  const body = {
-    dataset_path: dsPath,
-    type:       document.getElementById('cfgForce').value || null,
-    epochs:     document.getElementById('cfgEpochs').value,
-    batch_size: document.getElementById('cfgBatch').value,
-    lr:         document.getElementById('cfgLR').value,
-  };
-  try {
-    const r = await fetch('/api/train',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    const j = await r.json();
-    if(j.ok){
-      document.getElementById('progressCard').classList.remove('hidden');
-      document.getElementById('trainLog').innerHTML = '';
-      startSSE();
-    } else {
-      alert(j.error); btn.disabled = false;
-    }
-  } catch(e){ alert(e.message); btn.disabled = false; }
-}
-
-function startSSE(){
-  if(sse) sse.close();
-  sse = new EventSource('/api/train/status/stream');
-  sse.onmessage = ev => {
-    const d = JSON.parse(ev.data);
-    updateTrainUI(d);
-    if(d.status==='done'||d.status==='error'){
-      sse.close();
-      document.getElementById('btnTrain').disabled = false;
-      fetchModels();
-    }
-  };
-}
-
-function updateTrainUI(d){
-  const b = document.getElementById('trainBadge');
-  b.textContent = d.status; b.className = 'badge ' + d.status;
-  document.getElementById('trainMsg').textContent = d.message||'';
-  document.getElementById('trainFill').style.width = d.progress+'%';
-  document.getElementById('trPct').textContent   = d.progress+'%';
-  document.getElementById('trEpoch').textContent = d.epoch+'/'+d.total_epochs;
-  document.getElementById('trLoss').textContent  = d.loss!==null?d.loss:'—';
-  document.getElementById('trAcc').textContent   = d.accuracy!==null?(d.accuracy*100).toFixed(1)+'%':'—';
-
-  // log
-  const box = document.getElementById('trainLog');
-  if(d.message && !box.innerHTML.endsWith(d.message+'</div>')){
-    box.innerHTML += '<div class="entry">'+d.message+'</div>';
-    box.scrollTop = box.scrollHeight;
-  }
-
-  // chart
-  if(d.history && d.history.length) updateChart(d.history);
-}
-
-function updateChart(h){
-  const labels = h.map(x=>'E'+x.epoch);
-  const losses = h.map(x=>x.loss);
-  const accs   = h.map(x=>x.accuracy);
-  if(!chart){
-    const ctx = document.getElementById('trainChart').getContext('2d');
-    chart = new Chart(ctx,{
-      type:'line',
-      data:{labels, datasets:[
-        {label:'Loss',data:losses,borderColor:'#f97316',tension:.3,borderWidth:2,pointRadius:3},
-        {label:'Accuracy',data:accs,borderColor:'#22c55e',tension:.3,borderWidth:2,pointRadius:3},
-      ]},
-      options:{
-        responsive:true,
-        plugins:{legend:{labels:{color:'#94a3b8'}}},
-        scales:{
-          x:{ticks:{color:'#64748b'},grid:{color:'#1e293b'}},
-          y:{ticks:{color:'#64748b'},grid:{color:'#1e293b'},beginAtZero:true}
-        }
-      }
+/* ──── FPS Mode Control ──── */
+async function switchFpsMode(mode){
+  try{
+    const r=await fetch('/api/video/fps-mode',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({mode})
     });
-  } else {
-    chart.data.labels = labels;
-    chart.data.datasets[0].data = losses;
-    chart.data.datasets[1].data = accs;
-    chart.update();
+    const d=await r.json();
+    if(d.ok){
+      updateFpsUI(mode,d);
+      toast(`Switched to ${mode} FPS mode (${d.estimated_fps})`, 'success');
+    }else{
+      toast(d.error||'FPS mode switch failed','error');
+    }
+  }catch(e){
+    toast('Network error','error');
   }
 }
 
-// ─── MODELS ──────────────────────────────────────────────────────
-async function fetchModels(){
-  try {
-    const r = await fetch('/api/models');
-    const j = await r.json();
-    const tb = document.getElementById('modelsTbody');
-    const liveEl = document.getElementById('liveModelStatus');
-
-    // ── Live status cards ──
-    let liveHtml = '';
-    // Default detector card
-    const det = j.ssd || {};
-    const detName = det.detector || 'None';
-    const detLoaded = det.loaded;
-    const detClasses = det.classes ? det.classes.length : 0;
-    liveHtml += `<div style="background:var(--bg);border-radius:10px;padding:1rem;border-left:4px solid ${detLoaded?'var(--green)':'var(--red)'}">
-      <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem">
-        <span style="font-size:1.1rem">${detLoaded?'🟢':'🔴'}</span>
-        <strong>${detName}</strong>
-        <span class="badge ${detLoaded?'done':'error'}" style="margin-left:auto">${detLoaded?'LIVE':'OFFLINE'}</span>
-      </div>
-      <div style="font-size:.82rem;color:var(--muted)">
-        <div>Role: <strong>Primary Object Detector</strong></div>
-        <div>Classes: <strong>${detClasses}</strong> (COCO)</div>
-        <div>Objects: person, car, cell phone, bottle, chair, etc.</div>
-      </div>
-    </div>`;
-
-    // Custom model cards
-    for(const type of ['image','voice','text']){
-      const meta = j[type];
-      const icon = type==='image'?'🖼️':type==='voice'?'🎙️':'📝';
-      const loaded = !!meta;
-      const classes = meta ? (meta.classes||[]) : [];
-      const acc = meta ? (meta.accuracy*100).toFixed(1)+'%' : '—';
-      const at = meta ? new Date(meta.trained_at).toLocaleString() : '—';
-      liveHtml += `<div style="background:var(--bg);border-radius:10px;padding:1rem;border-left:4px solid ${loaded?'var(--accent)':'var(--border)'}">
-        <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem">
-          <span style="font-size:1.1rem">${icon}</span>
-          <strong>Custom ${type.charAt(0).toUpperCase()+type.slice(1)} Model</strong>
-          <span class="badge ${loaded?'detecting':'idle'}" style="margin-left:auto">${loaded?'ACTIVE':'NOT TRAINED'}</span>
-        </div>
-        ${loaded ? `<div style="font-size:.82rem;color:var(--muted)">
-          <div>Classes: <strong>${classes.join(', ')}</strong></div>
-          <div>Accuracy: <strong style="color:var(--green)">${acc}</strong></div>
-          <div>Trained: ${at}</div>
-          <div>Mode: <strong>${classes.length<=2?'Scene Classification':'Per-Object Detection'}</strong></div>
-        </div>` : `<div style="font-size:.82rem;color:var(--muted)">Upload a ${type} dataset in the Upload & Train tab to activate.</div>`}
-      </div>`;
-    }
-    liveEl.innerHTML = liveHtml;
-
-    // ── Model details table ──
-    let html = '';
-    // Default detector row
-    html += `<tr>
-      <td><span class="type-tag image">${detName}</span></td>
-      <td>${detClasses} classes</td>
-      <td>—</td><td>Pre-trained</td>
-      <td>${detLoaded?'<span style="color:var(--green)">✓ Live</span>':'<span style="color:var(--red)">✗ Offline</span>'}</td>
-    </tr>`;
-    for(const [type, meta] of Object.entries(j)){
-      if(type==='ssd') continue;
-      if(!meta) continue;
-      html += `<tr>
-        <td><span class="type-tag ${type}">${type}</span></td>
-        <td>${(meta.classes||[]).join(', ')}</td>
-        <td>${meta.accuracy?(meta.accuracy*100).toFixed(1)+'%':'—'}</td>
-        <td>${meta.trained_at?new Date(meta.trained_at).toLocaleString():'—'}</td>
-        <td><span style="color:var(--green)">✓ Live</span></td>
-      </tr>`;
-    }
-    tb.innerHTML = html || '<tr><td colspan="5" style="color:var(--muted)">No models loaded.</td></tr>';
-
-    // ── Update Live Detection tab model info ──
-    const ciEl = document.getElementById('customModelInfo');
-    const ddiEl = document.getElementById('defaultDetectorInfo');
-    if(ddiEl) ddiEl.textContent = `${detName} (${detClasses} COCO classes)`;
-    const types = ['image','voice','text'].filter(t=>j[t]);
-    if(types.length > 0){
-      ciEl.innerHTML = types.map(t => {
-        const m = j[t]; const cls = (m.classes||[]).filter(c=>c!=='background');
-        return `<span class="type-tag ${t}" style="margin-right:4px">${t}</span> ${cls.join(', ')} (${(m.accuracy*100).toFixed(0)}%)`;
-      }).join('<br>');
-    } else {
-      ciEl.textContent = 'None loaded';
-    }
-
-    // ── Fetch training history ──
-    fetchTrainHistory();
-
-  } catch(e){ console.error(e); }
+function updateFpsUI(mode,data){
+  const descriptions={
+    ultra:'Max FPS, detect every 10th frame',
+    high:'High FPS, detect every 5th frame',
+    balanced:'Normal FPS, detect every frame'
+  };
+  document.getElementById('fpsDesc').textContent=descriptions[mode];
+  document.getElementById('currentFps').textContent=mode.charAt(0).toUpperCase()+mode.slice(1);
+  document.getElementById('fpsMode').value=mode;
 }
 
-async function fetchTrainHistory(){
-  try {
-    const r = await fetch('/api/models/history');
-    const hist = await r.json();
-    const el = document.getElementById('trainHistoryLog');
-    if(!hist.length){ el.innerHTML = '<p style="color:var(--muted)">No training history yet. Upload a dataset to get started.</p>'; return; }
-    let html = '';
-    hist.forEach(h => {
-      const icon = h.type==='image'?'🖼️':h.type==='voice'?'🎙️':'📝';
-      const cls = (h.classes||[]).join(', ');
-      const acc = h.accuracy ? (h.accuracy*100).toFixed(1)+'%' : '—';
-      const at = h.trained_at ? new Date(h.trained_at).toLocaleString() : '—';
-      html += `<div class="entry" style="padding:.4rem 0;border-bottom:1px solid var(--border)">
-        <span>${icon}</span>
-        <span class="type-tag ${h.type}" style="font-size:.7rem">${h.type}</span>
-        <strong style="color:var(--text)">${cls}</strong>
-        — Accuracy: <span style="color:var(--green)">${acc}</span>
-        — Trained: <span style="color:var(--muted)">${at}</span>
-      </div>`;
-    });
-    el.innerHTML = html;
-  } catch(e){ console.error(e); }
-}
-
-async function forceReload(){
-  await fetch('/api/models/reload',{method:'POST'});
-  fetchModels();
-}
-
-// ─── TEXT CLASSIFICATION ─────────────────────────────────────────
-async function classifyText(){
-  const text = document.getElementById('pgText').value.trim();
-  if(!text) return;
-  const res = document.getElementById('pgResult');
-  res.innerHTML = '<span style="color:var(--accent)">Classifying…</span>';
-  try {
-    const r = await fetch('/api/classify/text',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
-    const j = await r.json();
-    if(j.ok){
-      res.innerHTML = `<div class="card" style="background:var(--card2)">
-        <strong>Label:</strong> <span class="type-tag text">${j.label}</span><br>
-        <strong>Confidence:</strong> ${(j.confidence*100).toFixed(1)}%
-      </div>`;
-    } else {
-      res.innerHTML = `<span style="color:var(--red)">${j.error}</span>`;
+async function loadFpsMode(){
+  try{
+    const r=await fetch('/api/video/fps-mode');
+    const d=await r.json();
+    if(d.ok){
+      updateFpsUI(d.current_mode,d);
     }
-  } catch(e){
-    res.innerHTML = `<span style="color:var(--red)">${e.message}</span>`;
+  }catch(e){
+    console.warn('Failed to load FPS mode:',e);
   }
 }
 
-// ─── INIT ────────────────────────────────────────────────────────
-fetchModels();
+/* ──── Init ──── */
+document.addEventListener('DOMContentLoaded',()=>{
+  fetch('/api/models').then(r=>r.json()).then(d=>{
+    if(d.ssd){const n=d.ssd.detector||'YOLOv4-tiny';setAdapterUI(n)}
+  }).catch(()=>{});
+  loadFpsMode();  // Load current FPS mode
+});
 </script>
 </body>
 </html>
