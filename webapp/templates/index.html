@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Smart Glasses – AI Dashboard</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🕶</text></svg>">
+<style>
+/* ─── DESIGN SYSTEM ─── */
+:root {
+  --bg:       #0b1120;
+  --bg2:      #111827;
+  --card:     #1e293b;
+  --card2:    #263548;
+  --border:   #334155;
+  --accent:   #38bdf8;
+  --accent2:  #818cf8;
+  --green:    #22c55e;
+  --red:      #ef4444;
+  --orange:   #f97316;
+  --yellow:   #eab308;
+  --text:     #e2e8f0;
+  --muted:    #94a3b8;
+  --radius:   12px;
+}
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.5;
+}
+a { color: var(--accent); text-decoration: none; }
+
+/* ─── LAYOUT ─── */
+.topbar {
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  padding: .75rem 1.5rem;
+  display: flex; align-items: center; gap: 1rem;
+  position: sticky; top: 0; z-index: 100;
+}
+.topbar h1 { font-size: 1.15rem; font-weight: 700; }
+.topbar .pill {
+  margin-left: auto;
+  padding: 3px 12px; border-radius: 999px;
+  font-size: .72rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .4px;
+}
+.pill.online  { background: #064e3b; color: #6ee7b7; }
+.pill.offline { background: #7f1d1d; color: #fca5a5; }
+
+.container { max-width: 1280px; margin: 0 auto; padding: 1.5rem 1rem; }
+
+/* tab nav */
+.tabs {
+  display: flex; gap: 0; border-bottom: 2px solid var(--border);
+  margin-bottom: 1.5rem;
+}
+.tabs button {
+  background: none; border: none; color: var(--muted); font-size: .92rem;
+  padding: .65rem 1.2rem; cursor: pointer; border-bottom: 2px solid transparent;
+  margin-bottom: -2px; transition: .2s;
+}
+.tabs button:hover { color: var(--text); }
+.tabs button.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ─── CARDS ─── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.4rem;
+  margin-bottom: 1.2rem;
+}
+.card h2 {
+  font-size: 1.05rem; margin-bottom: .9rem;
+  display: flex; align-items: center; gap: .45rem;
+}
+.card h3 { font-size: .92rem; color: var(--muted); margin-bottom: .6rem; }
+
+/* ─── GRID ─── */
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; }
+@media(max-width:860px){ .grid2 { grid-template-columns: 1fr; } }
+
+/* ─── VIDEO ─── */
+.video-wrapper {
+  position: relative; background: #000; border-radius: 10px;
+  overflow: hidden; aspect-ratio: 16/9;
+}
+.video-wrapper img {
+  width: 100%; height: 100%; object-fit: contain; display: block;
+}
+.video-overlay {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: linear-gradient(transparent, rgba(0,0,0,.7));
+  padding: .6rem 1rem; display: flex; justify-content: space-between;
+  font-size: .82rem; color: #ccc;
+}
+.video-placeholder {
+  width: 100%; height: 100%; display: flex; align-items: center;
+  justify-content: center; color: var(--muted); flex-direction: column; gap: .4rem;
+}
+
+/* ─── DETECTION LIST ─── */
+.det-list { max-height: 240px; overflow-y: auto; }
+.det-item {
+  display: flex; align-items: center; gap: .6rem;
+  padding: .4rem 0; border-bottom: 1px solid var(--border); font-size: .85rem;
+}
+.det-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.det-conf { margin-left: auto; color: var(--muted); font-size: .78rem; }
+
+/* ─── UPLOAD ─── */
+.upload-zone {
+  border: 2px dashed var(--border); border-radius: 10px;
+  padding: 2rem; text-align: center; cursor: pointer; transition: .2s;
+}
+.upload-zone:hover, .upload-zone.drag { border-color: var(--accent); }
+.upload-zone input { display: none; }
+.upload-zone svg { width: 40px; height: 40px; color: var(--accent); margin-bottom: .4rem; }
+
+/* ─── FORM GRID ─── */
+.form-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px,1fr));
+  gap: .8rem; margin: 1rem 0;
+}
+.form-grid label { font-size: .78rem; color: var(--muted); display: block; margin-bottom: 2px; }
+.form-grid input, .form-grid select {
+  width: 100%; padding: .42rem .6rem; border: 1px solid var(--border);
+  border-radius: 8px; background: var(--bg); color: var(--text); font-size: .88rem;
+}
+
+/* ─── BUTTONS ─── */
+.btn {
+  display: inline-flex; align-items: center; gap: .35rem;
+  padding: .5rem 1.2rem; border: none; border-radius: 8px;
+  font-size: .88rem; font-weight: 600; cursor: pointer; transition: .15s;
+}
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn-primary { background: var(--accent); color: #0f172a; }
+.btn-primary:hover:not(:disabled) { background: #7dd3fc; }
+.btn-green   { background: var(--green); color: #0f172a; }
+.btn-red     { background: var(--red); color: #fff; }
+.btn-ghost   { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+.btn-sm      { padding: .3rem .8rem; font-size: .8rem; }
+
+/* ─── PROGRESS ─── */
+.progress-bar {
+  height: 8px; border-radius: 4px; background: var(--bg); overflow: hidden; margin: .6rem 0;
+}
+.progress-bar .fill {
+  height: 100%; border-radius: 4px;
+  background: linear-gradient(90deg, var(--accent), var(--green));
+  transition: width .4s;
+}
+
+/* ─── BADGES ─── */
+.badge {
+  display: inline-block; padding: 2px 10px; border-radius: 999px;
+  font-size: .72rem; font-weight: 600; text-transform: uppercase;
+}
+.badge.idle      { background: #334155; color: var(--muted); }
+.badge.detecting { background: #1e40af; color: #93c5fd; }
+.badge.training  { background: #854d0e; color: #fde68a; }
+.badge.done      { background: #166534; color: #86efac; }
+.badge.error     { background: #7f1d1d; color: #fca5a5; }
+.type-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border-radius: 6px; font-size: .78rem; font-weight: 600;
+}
+.type-tag.image { background: #312e81; color: #a5b4fc; }
+.type-tag.voice, .type-tag.audio { background: #4a2040; color: #f0abfc; }
+.type-tag.text  { background: #1a3a2a; color: #86efac; }
+
+/* ─── LOG ─── */
+.log {
+  background: var(--bg); border-radius: 8px; padding: .8rem;
+  max-height: 200px; overflow-y: auto; font-family: 'Cascadia Code', monospace;
+  font-size: .8rem; line-height: 1.7; color: var(--muted);
+}
+.log .entry { border-bottom: 1px solid #1e293b; padding: 1px 0; }
+
+/* ─── TABLE ─── */
+table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); font-weight: 500; text-transform: uppercase; font-size: .72rem; letter-spacing: .4px; }
+
+/* ─── STATS ROW ─── */
+.stats { display: flex; gap: 1.2rem; flex-wrap: wrap; margin: .4rem 0; }
+.stat { display: flex; flex-direction: column; }
+.stat .val { font-size: 1.1rem; font-weight: 700; }
+.stat .lbl { font-size: .72rem; color: var(--muted); text-transform: uppercase; }
+
+/* ─── TEXT PLAYGROUND ─── */
+textarea {
+  width: 100%; min-height: 80px; padding: .6rem;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text); font-size: .9rem; resize: vertical;
+}
+
+/* ─── CHART ─── */
+canvas { max-height: 200px; }
+
+/* ─── MISC ─── */
+.mt  { margin-top: 1rem; }
+.mb  { margin-bottom: 1rem; }
+.flex { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+.hidden { display: none !important; }
+hr { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════ TOP BAR ═══════════════════════ -->
+<div class="topbar">
+  <span style="font-size:1.4rem">🕶️</span>
+  <h1>Smart Glasses – AI Dashboard</h1>
+  <span class="pill" id="camPill">---</span>
+</div>
+
+<div class="container">
+
+<!-- ═══════════════════════ TAB NAV ═══════════════════════ -->
+<div class="tabs" id="tabNav">
+  <button class="active" data-tab="tabLive">🎥 Live Detection</button>
+  <button data-tab="tabTrain">📦 Upload &amp; Train</button>
+  <button data-tab="tabModels">🤖 Models</button>
+  <button data-tab="tabPlayground">🧪 Playground</button>
+</div>
+
+<!-- ─────────────────── TAB 1: LIVE DETECTION ─────────────────── -->
+<div class="tab-panel active" id="tabLive">
+  <div class="grid2">
+    <!-- video -->
+    <div class="card">
+      <h2>🎥 Live Camera Feed</h2>
+      <div class="video-wrapper" id="videoWrap">
+        <div class="video-placeholder" id="videoPlaceholder">
+          <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9.75a2.25 2.25 0 002.25-2.25V7.5a2.25 2.25 0 00-2.25-2.25H4.5A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z"/></svg>
+          <span>Click "Start Camera" to begin</span>
+        </div>
+        <img id="videoFeed" class="hidden" src="" alt="Live feed"/>
+        <div class="video-overlay">
+          <span id="fpsLabel">FPS: --</span>
+          <span id="detCountLabel">Detections: 0</span>
+        </div>
+      </div>
+      <div class="flex mt">
+        <button class="btn btn-green btn-sm" id="btnStartCam" onclick="startCamera()">▶ Start Camera</button>
+        <button class="btn btn-red btn-sm"   id="btnStopCam"  onclick="stopCamera()" disabled>⏹ Stop Camera</button>
+      </div>
+    </div>
+
+    <!-- detections sidebar -->
+    <div>
+      <div class="card">
+        <h2>📋 Live Detections</h2>
+        <div class="det-list" id="detList">
+          <p style="color:var(--muted);font-size:.85rem">No detections yet – start the camera.</p>
+        </div>
+      </div>
+      <div class="card">
+        <h2>📊 Statistics</h2>
+        <div class="stats">
+          <div class="stat"><span class="val" id="statFps">--</span><span class="lbl">FPS</span></div>
+          <div class="stat"><span class="val" id="statDet">0</span><span class="lbl">Objects</span></div>
+          <div class="stat"><span class="val" id="statCustom">--</span><span class="lbl">Custom Model</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>ℹ️ Model Info</h2>
+        <p style="font-size:.85rem;color:var(--muted)">
+          <strong>Default:</strong> <span id="defaultDetectorInfo">Loading…</span><br>
+          <strong>Custom:</strong> <span id="customModelInfo">None loaded</span><br>
+          Models hot-reload every 3 seconds automatically.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────────────── TAB 2: UPLOAD & TRAIN ─────────────────── -->
+<div class="tab-panel" id="tabTrain">
+  <!-- upload -->
+  <div class="card" id="uploadCard">
+    <h2>📦 Upload Dataset</h2>
+    <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+      <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 16V4m0 0l-4 4m4-4l4 4M4 14v4a2 2 0 002 2h12a2 2 0 002-2v-4"/></svg>
+      <p><strong>Click or drag-and-drop</strong> a dataset archive</p>
+      <p style="font-size:.78rem;color:var(--muted)">Supports .zip, .tar.gz &mdash; Kaggle, Roboflow, or custom datasets. See Docs tab for format details.</p>
+      <input type="file" id="fileInput" accept=".zip,.tar,.tar.gz,.tgz,.gz,.bz2,.xz"/>
+    </div>
+    <div id="uploadMsg" class="mt"></div>
+  </div>
+
+  <!-- config (shown after upload) -->
+  <div class="card hidden" id="cfgCard">
+    <h2>⚙️ Training Configuration</h2>
+    <div class="flex mb">
+      <span>Detected type:</span>
+      <span class="type-tag" id="cfgTypeTag">—</span>
+      <span style="color:var(--muted);font-size:.82rem" id="cfgPath"></span>
+    </div>
+    <div class="form-grid">
+      <div><label>Epochs</label><input id="cfgEpochs" type="number" value="10" min="1"/></div>
+      <div><label>Batch Size</label><input id="cfgBatch" type="number" value="16" min="1"/></div>
+      <div><label>Learning Rate</label><input id="cfgLR" type="number" value="0.001" step="0.0001" min="0.00001"/></div>
+      <div><label>Force Type</label>
+        <select id="cfgForce"><option value="">Auto</option><option value="image">Image</option><option value="voice">Voice</option><option value="text">Text</option></select>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="btnTrain" onclick="startTraining()">🚀 Start Training</button>
+  </div>
+
+  <!-- progress (shown during/after training) -->
+  <div class="card hidden" id="progressCard">
+    <h2>📈 Training Progress <span class="badge idle" id="trainBadge">idle</span></h2>
+    <p id="trainMsg" style="font-size:.88rem;color:var(--muted);margin-bottom:.4rem"></p>
+    <div class="progress-bar"><div class="fill" id="trainFill" style="width:0%"></div></div>
+    <div class="stats" style="font-size:.85rem">
+      <div class="stat"><span class="val" id="trEpoch">0/0</span><span class="lbl">Epoch</span></div>
+      <div class="stat"><span class="val" id="trLoss">—</span><span class="lbl">Loss</span></div>
+      <div class="stat"><span class="val" id="trAcc">—</span><span class="lbl">Accuracy</span></div>
+      <div class="stat"><span class="val" id="trPct">0%</span><span class="lbl">Progress</span></div>
+    </div>
+    <canvas id="trainChart" class="mt"></canvas>
+    <h3 class="mt">Training Log</h3>
+    <div class="log" id="trainLog"></div>
+  </div>
+</div>
+
+<!-- ─────────────────── TAB 3: MODELS ─────────────────── -->
+<div class="tab-panel" id="tabModels">
+
+  <!-- Live Model Status -->
+  <div class="card">
+    <h2>🟢 Live Model Status</h2>
+    <div id="liveModelStatus" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;margin-top:.6rem">
+      <p style="color:var(--muted)">Loading…</p>
+    </div>
+    <div class="flex mt">
+      <button class="btn btn-ghost btn-sm" onclick="fetchModels()">🔄 Refresh</button>
+      <button class="btn btn-primary btn-sm" onclick="forceReload()">⚡ Force Hot-Reload</button>
+    </div>
+  </div>
+
+  <!-- Model Details Table -->
+  <div class="card">
+    <h2>📋 Model Details</h2>
+    <table>
+      <thead><tr><th>Type</th><th>Classes</th><th>Accuracy</th><th>Trained At</th><th>Status</th></tr></thead>
+      <tbody id="modelsTbody">
+        <tr><td colspan="5" style="color:var(--muted)">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Training History / Log -->
+  <div class="card">
+    <h2>📜 Training History</h2>
+    <div id="trainHistoryLog" class="log" style="max-height:250px">
+      <p style="color:var(--muted)">No training history yet.</p>
+    </div>
+  </div>
+
+  <!-- What To Do After Training -->
+  <div class="card">
+    <h2>✅ After Training – What's Next?</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;font-size:.88rem;color:var(--muted)">
+      <div style="background:var(--bg);border-radius:10px;padding:1rem">
+        <h3 style="color:var(--green);margin-bottom:.5rem">🎉 Training Succeeded</h3>
+        <ol style="padding-left:1.2rem;line-height:2">
+          <li><strong>Auto hot-reload</strong> — model loads within 3 seconds, no restart needed</li>
+          <li>Go to <strong>Live Detection</strong> tab and click <strong>Start Camera</strong></li>
+          <li>Point camera at objects your model was trained on</li>
+          <li>Custom detections appear with <span style="color:#eab308">[Custom]</span> labels in yellow</li>
+          <li>Upload a <strong>new dataset</strong> anytime to retrain — old model is replaced</li>
+        </ol>
+      </div>
+      <div style="background:var(--bg);border-radius:10px;padding:1rem">
+        <h3 style="color:var(--accent);margin-bottom:.5rem">💡 Tips for Better Results</h3>
+        <ul style="padding-left:1.2rem;line-height:2">
+          <li>Use <strong>3+ classes</strong> for more precise per-object detection</li>
+          <li>Use <strong>200+ images per class</strong> for better accuracy</li>
+          <li>Include varied backgrounds, angles, and lighting</li>
+          <li>Binary models (1 class + background) work best for scene classification</li>
+          <li>Multi-class models (3+) work best for per-object detection</li>
+          <li>Increase <strong>epochs</strong> (15-20) if accuracy is below 80%</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>📖 Dataset Format Guide</h2>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:.8rem">
+      Upload datasets from <strong>Kaggle, Roboflow, or custom</strong> &mdash; all common formats are auto-detected.
+      Accepts <strong>.zip</strong> and <strong>.tar.gz</strong> archives.
+    </p>
+    <div class="grid2">
+      <div>
+        <h3>1. Classification Folders</h3>
+        <pre style="background:var(--bg);padding:.8rem;border-radius:8px;font-size:.78rem;color:var(--muted);overflow-x:auto">dataset.zip
+  ├── cat/
+  │   ├── cat001.jpg
+  │   └── cat002.jpg
+  ├── dog/
+  │   └── dog001.jpg
+  └── bird/
+      └── bird001.jpg</pre>
+      </div>
+      <div>
+        <h3>2. CSV-Labeled (Kaggle-style)</h3>
+        <pre style="background:var(--bg);padding:.8rem;border-radius:8px;font-size:.78rem;color:var(--muted);overflow-x:auto">dataset.zip
+  ├── train/
+  │   ├── img001.jpg
+  │   └── img002.jpg
+  ├── test/
+  │   └── img003.jpg
+  ├── Training_set.csv  ← filename,label
+  └── Testing_set.csv</pre>
+        <p style="font-size:.7rem;color:var(--muted);margin-top:.2rem">CSV columns: filename + label (also accepts: image, class, category, species, target, etc.)</p>
+      </div>
+      <div>
+        <h3>3. YOLO Format</h3>
+        <pre style="background:var(--bg);padding:.8rem;border-radius:8px;font-size:.78rem;color:var(--muted);overflow-x:auto">dataset.zip
+  ├── data.yaml         ← class names
+  ├── train/
+  │   ├── images/
+  │   │   └── img001.jpg
+  │   └── labels/
+  │       └── img001.txt
+  └── valid/
+      ├── images/
+      └── labels/</pre>
+        <p style="font-size:.7rem;color:var(--muted);margin-top:.2rem">YOLO txt: <code>class_id x_center y_center width height</code> (normalized)</p>
+      </div>
+      <div>
+        <h3>4. COCO JSON</h3>
+        <pre style="background:var(--bg);padding:.8rem;border-radius:8px;font-size:.78rem;color:var(--muted);overflow-x:auto">dataset.zip
+  ├── images/
+  │   ├── img001.jpg
+  │   └── img002.jpg
+  └── _annotations.coco.json</pre>
+        <p style="font-size:.7rem;color:var(--muted);margin-top:.2rem">Standard COCO JSON with images, annotations, categories arrays</p>
+      </div>
+      <div>
+        <h3>5. Pascal VOC (XML)</h3>
+        <pre style="background:var(--bg);padding:.8rem;border-radius:8px;font-size:.78rem;color:var(--muted);overflow-x:auto">dataset.zip
+  ├── images/
+  │   └── photo001.jpg
+  └── annotations/
+      └── photo001.xml</pre>
+      </div>
+      <div>
+        <h3>6. Train/Test Splits</h3>
+        <pre style="background:var(--bg);padding:.8rem;border-radius:8px;font-size:.78rem;color:var(--muted);overflow-x:auto">dataset.zip
+  ├── train/
+  │   ├── cat/
+  │   │   └── cat001.jpg
+  │   └── dog/
+  │       └── dog001.jpg
+  └── test/
+      ├── cat/
+      └── dog/</pre>
+      </div>
+      <div>
+        <h3>Voice / Audio Dataset</h3>
+        <pre style="background:var(--bg);padding:.8rem;border-radius:8px;font-size:.78rem;color:var(--muted);overflow-x:auto">audio.zip
+  ├── hello/
+  │   └── hello_01.wav
+  └── stop/
+      └── stop_01.wav</pre>
+      </div>
+      <div>
+        <h3>Text Dataset (CSV)</h3>
+        <pre style="background:var(--bg);padding:.8rem;border-radius:8px;font-size:.78rem;color:var(--muted);overflow-x:auto">text.zip
+  └── data.csv
+
+CSV: text,label
+  "Great!",positive
+  "Bad.",negative</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─────────────────── TAB 4: PLAYGROUND ─────────────────── -->
+<div class="tab-panel" id="tabPlayground">
+  <div class="grid2">
+    <div class="card">
+      <h2>💬 Text Classification</h2>
+      <p style="font-size:.85rem;color:var(--muted);margin-bottom:.6rem">
+        Type a sentence and the trained text model will classify it.
+      </p>
+      <textarea id="pgText" placeholder="Enter text to classify…"></textarea>
+      <button class="btn btn-primary btn-sm mt" onclick="classifyText()">Classify</button>
+      <div id="pgResult" class="mt"></div>
+    </div>
+    <div class="card">
+      <h2>🔌 API Reference</h2>
+      <table style="font-size:.8rem">
+        <tr><td><code>GET</code></td><td>/api/video/feed</td><td>MJPEG stream</td></tr>
+        <tr><td><code>POST</code></td><td>/api/video/start</td><td>Start camera</td></tr>
+        <tr><td><code>POST</code></td><td>/api/video/stop</td><td>Stop camera</td></tr>
+        <tr><td><code>GET</code></td><td>/api/video/detections</td><td>Current detections JSON</td></tr>
+        <tr><td><code>POST</code></td><td>/api/upload</td><td>Upload dataset (.zip, .tar.gz)</td></tr>
+        <tr><td><code>POST</code></td><td>/api/train</td><td>Start training</td></tr>
+        <tr><td><code>GET</code></td><td>/api/train/status</td><td>Training status JSON</td></tr>
+        <tr><td><code>GET</code></td><td>/api/train/status/stream</td><td>SSE live stream</td></tr>
+        <tr><td><code>GET</code></td><td>/api/models</td><td>All models info</td></tr>
+        <tr><td><code>POST</code></td><td>/api/models/reload</td><td>Force hot-reload</td></tr>
+        <tr><td><code>POST</code></td><td>/api/classify/text</td><td>Classify text input</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+</div><!-- .container -->
+
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   CLIENT-SIDE JAVASCRIPT  –  Single-page controller
+   ═══════════════════════════════════════════════════════════════════ */
+
+// ─── TAB NAVIGATION ──────────────────────────────────────────────
+document.querySelectorAll('#tabNav button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#tabNav button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ─── STATE ───────────────────────────────────────────────────────
+let dsPath = null, dsType = null, chart = null, sse = null, detPoll = null;
+
+// ─── CAMERA ──────────────────────────────────────────────────────
+function startCamera(){
+  fetch('/api/video/start',{method:'POST'}).then(r=>r.json()).then(j=>{
+    if(j.ok){
+      document.getElementById('videoPlaceholder').classList.add('hidden');
+      const img = document.getElementById('videoFeed');
+      img.src = '/api/video/feed?' + Date.now();
+      img.classList.remove('hidden');
+      document.getElementById('btnStartCam').disabled = true;
+      document.getElementById('btnStopCam').disabled  = false;
+      setCamPill(true);
+      startDetPoll();
+    }
+  });
+}
+
+function stopCamera(){
+  fetch('/api/video/stop',{method:'POST'}).then(()=>{
+    document.getElementById('videoFeed').classList.add('hidden');
+    document.getElementById('videoPlaceholder').classList.remove('hidden');
+    document.getElementById('btnStartCam').disabled = false;
+    document.getElementById('btnStopCam').disabled  = true;
+    setCamPill(false);
+    stopDetPoll();
+  });
+}
+
+function setCamPill(on){
+  const p = document.getElementById('camPill');
+  p.textContent = on ? 'CAMERA ON' : 'CAMERA OFF';
+  p.className = 'pill ' + (on ? 'online' : 'offline');
+}
+setCamPill(false);
+
+// ─── DETECTION POLL ──────────────────────────────────────────────
+function startDetPoll(){
+  stopDetPoll();
+  detPoll = setInterval(()=>{
+    fetch('/api/video/detections').then(r=>r.json()).then(d=>{
+      document.getElementById('fpsLabel').textContent = 'FPS: ' + d.fps;
+      document.getElementById('statFps').textContent  = d.fps;
+      document.getElementById('detCountLabel').textContent = 'Detections: ' + d.detections.length;
+      document.getElementById('statDet').textContent = d.detections.length;
+
+      const list = document.getElementById('detList');
+      if(!d.detections.length){
+        list.innerHTML = '<p style="color:var(--muted);font-size:.85rem">No objects detected.</p>';
+        return;
+      }
+      list.innerHTML = d.detections.map(det => {
+        const col = det.color ? `rgb(${det.color.map(Math.round).join(',')})` : 'var(--accent)';
+        return `<div class="det-item">
+          <span class="det-dot" style="background:${col}"></span>
+          <span>${det.label}</span>
+          <span class="det-conf">${(det.confidence*100).toFixed(1)}%</span>
+        </div>`;
+      }).join('');
+
+      // custom model indicator
+      const custom = d.detections.find(x => x.label.startsWith('[Custom]'));
+      document.getElementById('statCustom').textContent = custom ? '✓ Active' : '—';
+      document.getElementById('customModelInfo').textContent = custom ? custom.label : 'None loaded';
+    }).catch(()=>{});
+  }, 500);
+}
+
+function stopDetPoll(){ if(detPoll) clearInterval(detPoll); detPoll=null; }
+
+// ─── UPLOAD ──────────────────────────────────────────────────────
+const dz = document.getElementById('dropZone');
+const fi = document.getElementById('fileInput');
+['dragenter','dragover'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.add('drag'); }));
+['dragleave','drop'].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.remove('drag'); }));
+dz.addEventListener('drop', ev => { if(ev.dataTransfer.files.length) uploadFile(ev.dataTransfer.files[0]); });
+fi.addEventListener('change', () => { if(fi.files.length) uploadFile(fi.files[0]); });
+
+async function uploadFile(file){
+  const msg = document.getElementById('uploadMsg');
+  msg.innerHTML = '<span style="color:var(--accent)">⏳ Uploading… please wait</span>';
+  const fd = new FormData(); fd.append('file', file);
+  try {
+    const r = await fetch('/api/upload',{method:'POST',body:fd});
+    const j = await r.json();
+    if(j.ok){
+      dsPath = j.dataset_path; dsType = j.dataset_type;
+      msg.innerHTML = `<span style="color:var(--green)">✅ ${j.message}</span>`;
+      showConfig();
+    } else {
+      msg.innerHTML = `<span style="color:var(--red)">❌ ${j.error}</span>`;
+    }
+  } catch(e){
+    msg.innerHTML = `<span style="color:var(--red)">Upload failed: ${e.message}</span>`;
+  }
+}
+
+function showConfig(){
+  const cc = document.getElementById('cfgCard'); cc.classList.remove('hidden');
+  const tag = document.getElementById('cfgTypeTag');
+  tag.textContent = dsType; tag.className = 'type-tag ' + dsType;
+  document.getElementById('cfgPath').textContent = dsPath;
+}
+
+// ─── TRAINING ────────────────────────────────────────────────────
+async function startTraining(){
+  const btn = document.getElementById('btnTrain'); btn.disabled = true;
+  const body = {
+    dataset_path: dsPath,
+    type:       document.getElementById('cfgForce').value || null,
+    epochs:     document.getElementById('cfgEpochs').value,
+    batch_size: document.getElementById('cfgBatch').value,
+    lr:         document.getElementById('cfgLR').value,
+  };
+  try {
+    const r = await fetch('/api/train',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const j = await r.json();
+    if(j.ok){
+      document.getElementById('progressCard').classList.remove('hidden');
+      document.getElementById('trainLog').innerHTML = '';
+      startSSE();
+    } else {
+      alert(j.error); btn.disabled = false;
+    }
+  } catch(e){ alert(e.message); btn.disabled = false; }
+}
+
+function startSSE(){
+  if(sse) sse.close();
+  sse = new EventSource('/api/train/status/stream');
+  sse.onmessage = ev => {
+    const d = JSON.parse(ev.data);
+    updateTrainUI(d);
+    if(d.status==='done'||d.status==='error'){
+      sse.close();
+      document.getElementById('btnTrain').disabled = false;
+      fetchModels();
+    }
+  };
+}
+
+function updateTrainUI(d){
+  const b = document.getElementById('trainBadge');
+  b.textContent = d.status; b.className = 'badge ' + d.status;
+  document.getElementById('trainMsg').textContent = d.message||'';
+  document.getElementById('trainFill').style.width = d.progress+'%';
+  document.getElementById('trPct').textContent   = d.progress+'%';
+  document.getElementById('trEpoch').textContent = d.epoch+'/'+d.total_epochs;
+  document.getElementById('trLoss').textContent  = d.loss!==null?d.loss:'—';
+  document.getElementById('trAcc').textContent   = d.accuracy!==null?(d.accuracy*100).toFixed(1)+'%':'—';
+
+  // log
+  const box = document.getElementById('trainLog');
+  if(d.message && !box.innerHTML.endsWith(d.message+'</div>')){
+    box.innerHTML += '<div class="entry">'+d.message+'</div>';
+    box.scrollTop = box.scrollHeight;
+  }
+
+  // chart
+  if(d.history && d.history.length) updateChart(d.history);
+}
+
+function updateChart(h){
+  const labels = h.map(x=>'E'+x.epoch);
+  const losses = h.map(x=>x.loss);
+  const accs   = h.map(x=>x.accuracy);
+  if(!chart){
+    const ctx = document.getElementById('trainChart').getContext('2d');
+    chart = new Chart(ctx,{
+      type:'line',
+      data:{labels, datasets:[
+        {label:'Loss',data:losses,borderColor:'#f97316',tension:.3,borderWidth:2,pointRadius:3},
+        {label:'Accuracy',data:accs,borderColor:'#22c55e',tension:.3,borderWidth:2,pointRadius:3},
+      ]},
+      options:{
+        responsive:true,
+        plugins:{legend:{labels:{color:'#94a3b8'}}},
+        scales:{
+          x:{ticks:{color:'#64748b'},grid:{color:'#1e293b'}},
+          y:{ticks:{color:'#64748b'},grid:{color:'#1e293b'},beginAtZero:true}
+        }
+      }
+    });
+  } else {
+    chart.data.labels = labels;
+    chart.data.datasets[0].data = losses;
+    chart.data.datasets[1].data = accs;
+    chart.update();
+  }
+}
+
+// ─── MODELS ──────────────────────────────────────────────────────
+async function fetchModels(){
+  try {
+    const r = await fetch('/api/models');
+    const j = await r.json();
+    const tb = document.getElementById('modelsTbody');
+    const liveEl = document.getElementById('liveModelStatus');
+
+    // ── Live status cards ──
+    let liveHtml = '';
+    // Default detector card
+    const det = j.ssd || {};
+    const detName = det.detector || 'None';
+    const detLoaded = det.loaded;
+    const detClasses = det.classes ? det.classes.length : 0;
+    liveHtml += `<div style="background:var(--bg);border-radius:10px;padding:1rem;border-left:4px solid ${detLoaded?'var(--green)':'var(--red)'}">
+      <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem">
+        <span style="font-size:1.1rem">${detLoaded?'🟢':'🔴'}</span>
+        <strong>${detName}</strong>
+        <span class="badge ${detLoaded?'done':'error'}" style="margin-left:auto">${detLoaded?'LIVE':'OFFLINE'}</span>
+      </div>
+      <div style="font-size:.82rem;color:var(--muted)">
+        <div>Role: <strong>Primary Object Detector</strong></div>
+        <div>Classes: <strong>${detClasses}</strong> (COCO)</div>
+        <div>Objects: person, car, cell phone, bottle, chair, etc.</div>
+      </div>
+    </div>`;
+
+    // Custom model cards
+    for(const type of ['image','voice','text']){
+      const meta = j[type];
+      const icon = type==='image'?'🖼️':type==='voice'?'🎙️':'📝';
+      const loaded = !!meta;
+      const classes = meta ? (meta.classes||[]) : [];
+      const acc = meta ? (meta.accuracy*100).toFixed(1)+'%' : '—';
+      const at = meta ? new Date(meta.trained_at).toLocaleString() : '—';
+      liveHtml += `<div style="background:var(--bg);border-radius:10px;padding:1rem;border-left:4px solid ${loaded?'var(--accent)':'var(--border)'}">
+        <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem">
+          <span style="font-size:1.1rem">${icon}</span>
+          <strong>Custom ${type.charAt(0).toUpperCase()+type.slice(1)} Model</strong>
+          <span class="badge ${loaded?'detecting':'idle'}" style="margin-left:auto">${loaded?'ACTIVE':'NOT TRAINED'}</span>
+        </div>
+        ${loaded ? `<div style="font-size:.82rem;color:var(--muted)">
+          <div>Classes: <strong>${classes.join(', ')}</strong></div>
+          <div>Accuracy: <strong style="color:var(--green)">${acc}</strong></div>
+          <div>Trained: ${at}</div>
+          <div>Mode: <strong>${classes.length<=2?'Scene Classification':'Per-Object Detection'}</strong></div>
+        </div>` : `<div style="font-size:.82rem;color:var(--muted)">Upload a ${type} dataset in the Upload & Train tab to activate.</div>`}
+      </div>`;
+    }
+    liveEl.innerHTML = liveHtml;
+
+    // ── Model details table ──
+    let html = '';
+    // Default detector row
+    html += `<tr>
+      <td><span class="type-tag image">${detName}</span></td>
+      <td>${detClasses} classes</td>
+      <td>—</td><td>Pre-trained</td>
+      <td>${detLoaded?'<span style="color:var(--green)">✓ Live</span>':'<span style="color:var(--red)">✗ Offline</span>'}</td>
+    </tr>`;
+    for(const [type, meta] of Object.entries(j)){
+      if(type==='ssd') continue;
+      if(!meta) continue;
+      html += `<tr>
+        <td><span class="type-tag ${type}">${type}</span></td>
+        <td>${(meta.classes||[]).join(', ')}</td>
+        <td>${meta.accuracy?(meta.accuracy*100).toFixed(1)+'%':'—'}</td>
+        <td>${meta.trained_at?new Date(meta.trained_at).toLocaleString():'—'}</td>
+        <td><span style="color:var(--green)">✓ Live</span></td>
+      </tr>`;
+    }
+    tb.innerHTML = html || '<tr><td colspan="5" style="color:var(--muted)">No models loaded.</td></tr>';
+
+    // ── Update Live Detection tab model info ──
+    const ciEl = document.getElementById('customModelInfo');
+    const ddiEl = document.getElementById('defaultDetectorInfo');
+    if(ddiEl) ddiEl.textContent = `${detName} (${detClasses} COCO classes)`;
+    const types = ['image','voice','text'].filter(t=>j[t]);
+    if(types.length > 0){
+      ciEl.innerHTML = types.map(t => {
+        const m = j[t]; const cls = (m.classes||[]).filter(c=>c!=='background');
+        return `<span class="type-tag ${t}" style="margin-right:4px">${t}</span> ${cls.join(', ')} (${(m.accuracy*100).toFixed(0)}%)`;
+      }).join('<br>');
+    } else {
+      ciEl.textContent = 'None loaded';
+    }
+
+    // ── Fetch training history ──
+    fetchTrainHistory();
+
+  } catch(e){ console.error(e); }
+}
+
+async function fetchTrainHistory(){
+  try {
+    const r = await fetch('/api/models/history');
+    const hist = await r.json();
+    const el = document.getElementById('trainHistoryLog');
+    if(!hist.length){ el.innerHTML = '<p style="color:var(--muted)">No training history yet. Upload a dataset to get started.</p>'; return; }
+    let html = '';
+    hist.forEach(h => {
+      const icon = h.type==='image'?'🖼️':h.type==='voice'?'🎙️':'📝';
+      const cls = (h.classes||[]).join(', ');
+      const acc = h.accuracy ? (h.accuracy*100).toFixed(1)+'%' : '—';
+      const at = h.trained_at ? new Date(h.trained_at).toLocaleString() : '—';
+      html += `<div class="entry" style="padding:.4rem 0;border-bottom:1px solid var(--border)">
+        <span>${icon}</span>
+        <span class="type-tag ${h.type}" style="font-size:.7rem">${h.type}</span>
+        <strong style="color:var(--text)">${cls}</strong>
+        — Accuracy: <span style="color:var(--green)">${acc}</span>
+        — Trained: <span style="color:var(--muted)">${at}</span>
+      </div>`;
+    });
+    el.innerHTML = html;
+  } catch(e){ console.error(e); }
+}
+
+async function forceReload(){
+  await fetch('/api/models/reload',{method:'POST'});
+  fetchModels();
+}
+
+// ─── TEXT CLASSIFICATION ─────────────────────────────────────────
+async function classifyText(){
+  const text = document.getElementById('pgText').value.trim();
+  if(!text) return;
+  const res = document.getElementById('pgResult');
+  res.innerHTML = '<span style="color:var(--accent)">Classifying…</span>';
+  try {
+    const r = await fetch('/api/classify/text',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+    const j = await r.json();
+    if(j.ok){
+      res.innerHTML = `<div class="card" style="background:var(--card2)">
+        <strong>Label:</strong> <span class="type-tag text">${j.label}</span><br>
+        <strong>Confidence:</strong> ${(j.confidence*100).toFixed(1)}%
+      </div>`;
+    } else {
+      res.innerHTML = `<span style="color:var(--red)">${j.error}</span>`;
+    }
+  } catch(e){
+    res.innerHTML = `<span style="color:var(--red)">${e.message}</span>`;
+  }
+}
+
+// ─── INIT ────────────────────────────────────────────────────────
+fetchModels();
+</script>
+</body>
+</html>

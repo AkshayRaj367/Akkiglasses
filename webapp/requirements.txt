@@ -1,0 +1,25 @@
+# ─── Smart Glasses Web App ───────────────────────────────────────
+# Install all dependencies with:
+#   pip install -r requirements.txt
+
+# Core web
+flask>=2.3
+
+# Computer vision
+opencv-python>=4.8
+numpy
+imutils
+
+# Deep learning (image & voice training)
+torch>=2.0
+torchvision>=0.15
+
+# Text classification
+scikit-learn>=1.3
+
+# Audio feature extraction
+librosa>=0.10
+
+# Utilities
+Pillow
+tqdm
