@@ -15,6 +15,7 @@ Project: Smart Glasses – Object Detection
 import os
 import json
 import hashlib
+import shutil
 import threading
 import logging
 from pathlib import Path
@@ -35,7 +36,9 @@ _YOLO_DIR     = PROJECT_ROOT / "yolo-coco"
 _YOLO_CFG     = _YOLO_DIR / "yolov4-tiny.cfg"
 _YOLO_WEIGHTS = _YOLO_DIR / "yolov4-tiny.weights"
 _YOLO_NAMES   = _YOLO_DIR / "coco.names"
-
+# ── YOLOv11 (Ultralytics – 80 COCO classes, state-of-the-art) ──────────────
+_YOLO11_DIR    = PROJECT_ROOT / "yolo-coco"
+_YOLO11_PT     = _YOLO11_DIR / "yolo11n.pt"       # nano model (~6 MB)
 # ── MobileNet-SSD fallback (20 VOC classes) ─────────────────────────────
 _SSD_DIR       = PROJECT_ROOT / "real-time-object-detection"
 _SSD_PROTO     = _SSD_DIR / "MobileNetSSD_deploy.prototxt.txt"
@@ -56,20 +59,221 @@ COCO_COLORS = np.random.uniform(0, 255, size=(max(len(COCO_CLASSES), 80), 3))
 SSD_COLORS  = np.random.uniform(0, 255, size=(len(SSD_CLASSES), 3))
 
 
+# =====================================================================
+#  MODEL REGISTRY  –  multi-model storage with versioning
+# =====================================================================
+
+class ModelRegistry:
+    """
+    Persistent registry of all trained models.
+
+    Every trained model is copied into  trained_models/models/<unique_id>/
+    alongside a registry.json index.  The 'active' model for each type is
+    the one whose files live in  trained_models/<type>_model/  (unchanged
+    from the original layout, so hot-reload keeps working).
+
+    Switching the active model copies its files into the type directory
+    and the ModelManager's watcher picks up the MD5 change.
+    """
+
+    REGISTRY_FILE = MODELS_DIR / "registry.json"
+    MODELS_STORE  = MODELS_DIR / "models"
+
+    def __init__(self):
+        self.MODELS_STORE.mkdir(parents=True, exist_ok=True)
+        self._data = self._load()
+        # Auto-import any existing active model not yet in the registry
+        self._auto_import_existing()
+
+    def _load(self):
+        if self.REGISTRY_FILE.exists():
+            try:
+                return json.loads(self.REGISTRY_FILE.read_text())
+            except Exception:
+                return {"models": []}
+        return {"models": []}
+
+    def _save(self):
+        self.REGISTRY_FILE.write_text(
+            json.dumps(self._data, indent=2, default=str))
+
+    def _auto_import_existing(self):
+        """If there's an active model on disk that isn't in the registry,
+        import it so the UI shows it."""
+        existing_ids = {m["id"] for m in self._data["models"]}
+        for mt in ("image", "text", "voice", "yolo_detection"):
+            model_dir = (MODELS_DIR / "yolo_custom" if mt == "yolo_detection"
+                         else MODELS_DIR / f"{mt}_model")
+            meta_f = model_dir / "meta.json"
+            if not meta_f.exists():
+                continue
+            try:
+                meta = json.loads(meta_f.read_text())
+            except Exception:
+                continue
+            # Check if already registered
+            already = False
+            for m in self._data["models"]:
+                if (m["type"] == mt
+                        and m.get("meta", {}).get("trained_at")
+                            == meta.get("trained_at")):
+                    already = True
+                    break
+            if already:
+                continue
+            # Register it
+            ts = meta.get("trained_at", datetime.now().isoformat())
+            classes = meta.get("classes", [])
+            name = ", ".join(classes[:3]) if classes else mt
+            mid = f"{mt[:3]}_{ts.replace(':', '').replace('-', '')[:15]}_{len(classes)}cls"
+            if mid in existing_ids:
+                continue
+            dst = self.MODELS_STORE / mid
+            dst.mkdir(parents=True, exist_ok=True)
+            for f in model_dir.iterdir():
+                if f.is_file():
+                    shutil.copy2(str(f), str(dst / f.name))
+            entry = {
+                "id": mid, "type": mt, "name": name,
+                "classes": classes,
+                "accuracy": meta.get("accuracy"),
+                "trained_at": ts, "active": True,
+                "path": str(dst), "meta": meta,
+            }
+            for m in self._data["models"]:
+                if m["type"] == mt:
+                    m["active"] = False
+            self._data["models"].append(entry)
+        self._save()
+
+    # ── public API ───────────────────────────────────────────────────
+
+    def register(self, model_type: str, name: str, classes: list,
+                 accuracy: float, meta: dict) -> str:
+        """Register a newly trained model. Returns model ID."""
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        n_cls = len(classes) if classes else 0
+        clean = name.replace(" ", "_").lower()[:20]
+        model_id = f"{model_type[:3]}_{ts}_{clean}_{n_cls}cls"
+
+        # Source directory depends on model type
+        if model_type == "yolo_detection":
+            src_dir = MODELS_DIR / "yolo_custom"
+        else:
+            src_dir = MODELS_DIR / f"{model_type}_model"
+
+        dst_dir = self.MODELS_STORE / model_id
+        dst_dir.mkdir(parents=True, exist_ok=True)
+        for f in src_dir.iterdir():
+            if f.is_file():
+                shutil.copy2(str(f), str(dst_dir / f.name))
+
+        entry = {
+            "id": model_id, "type": model_type, "name": name,
+            "classes": classes, "accuracy": accuracy,
+            "trained_at": datetime.now().isoformat(),
+            "active": True, "path": str(dst_dir), "meta": meta,
+        }
+        for m in self._data["models"]:
+            if m["type"] == model_type:
+                m["active"] = False
+        self._data["models"].append(entry)
+        self._save()
+        logger.info(f"[REGISTRY] Registered model {model_id}")
+        return model_id
+
+    def list_models(self, model_type: str | None = None) -> list[dict]:
+        models = self._data["models"]
+        if model_type:
+            models = [m for m in models if m["type"] == model_type]
+        return models
+
+    def activate(self, model_id: str) -> bool:
+        """Copy stored model into the active type directory."""
+        model = None
+        for m in self._data["models"]:
+            if m["id"] == model_id:
+                model = m
+                break
+        if not model:
+            return False
+
+        src_dir = Path(model["path"])
+        if not src_dir.exists():
+            return False
+
+        # Destination depends on model type
+        if model["type"] == "yolo_detection":
+            dst_dir = MODELS_DIR / "yolo_custom"
+        else:
+            dst_dir = MODELS_DIR / f"{model['type']}_model"
+
+        dst_dir.mkdir(parents=True, exist_ok=True)
+
+        # Clear and copy
+        for f in dst_dir.iterdir():
+            if f.is_file():
+                f.unlink()
+        for f in src_dir.iterdir():
+            if f.is_file():
+                shutil.copy2(str(f), str(dst_dir / f.name))
+
+        for m in self._data["models"]:
+            if m["type"] == model["type"]:
+                m["active"] = (m["id"] == model_id)
+        self._save()
+        logger.info(f"[REGISTRY] Activated model {model_id}")
+        return True
+
+    def delete(self, model_id: str) -> bool:
+        """Delete a stored model (cannot delete active model)."""
+        model = None
+        for m in self._data["models"]:
+            if m["id"] == model_id:
+                model = m
+                break
+        if not model or model.get("active"):
+            return False
+
+        p = Path(model["path"])
+        if p.exists():
+            shutil.rmtree(p)
+        self._data["models"] = [
+            m for m in self._data["models"] if m["id"] != model_id]
+        self._save()
+        logger.info(f"[REGISTRY] Deleted model {model_id}")
+        return True
+
+    def get_active(self, model_type: str):
+        for m in self._data["models"]:
+            if m["type"] == model_type and m.get("active"):
+                return m
+        return None
+
+
+# singleton
+model_registry = ModelRegistry()
+
+
 class ModelManager:
     """Thread-safe model store with automatic hot-reload from disk."""
 
     def __init__(self):
         self._lock = threading.Lock()
 
-        # ── YOLO primary detector ──
+        # ── YOLOv11 (Ultralytics) primary detector ──
+        self.yolo11_model = None
+        self._load_yolo11()
+
+        # ── YOLOv4-tiny fallback detector ──
         self.yolo_net = None
         self.yolo_output_layers = None
-        self._load_yolo()
+        if self.yolo11_model is None:
+            self._load_yolo()
 
         # ── SSD fallback detector ──
         self.ssd_net = None
-        if self.yolo_net is None:
+        if self.yolo11_model is None and self.yolo_net is None:
             self._load_ssd()
 
         # ── custom trained models ──
@@ -84,8 +288,14 @@ class ModelManager:
         self._voice_meta  = None
         self._voice_hash  = None
 
+        # ── custom YOLO detection model (trained via YOLODetectionTrainer) ──
+        self._custom_yolo_model = None
+        self._custom_yolo_meta  = None
+        self._custom_yolo_hash  = None
+
         # pre-load anything already on disk (graceful -- torch may be broken)
-        for loader in (self._try_load_image_model, self._try_load_text_model, self._try_load_voice_model):
+        for loader in (self._try_load_image_model, self._try_load_text_model,
+                       self._try_load_voice_model, self._try_load_custom_yolo):
             try:
                 loader()
             except Exception as e:
@@ -96,7 +306,33 @@ class ModelManager:
         self._watcher = threading.Thread(target=self._watch_loop, daemon=True)
         self._watcher.start()
 
-    # ── YOLO ─────────────────────────────────────────────────────────────
+    # ── YOLOv11 (Ultralytics) ──────────────────────────────────────────────
+    def _load_yolo11(self):
+        """Load YOLOv11 from the ultralytics package.  Auto-downloads
+        the nano model (~6 MB) the first time if not on disk."""
+        try:
+            from ultralytics import YOLO as UltralyticsYOLO
+            # Use on-disk weights if present, otherwise let ultralytics fetch them
+            weight_path = str(_YOLO11_PT) if _YOLO11_PT.exists() else "yolo11n.pt"
+            model = UltralyticsYOLO(weight_path)
+            # Warm up with a tiny dummy frame so the first real frame isn't slow
+            model.predict(np.zeros((64, 64, 3), dtype=np.uint8),
+                          verbose=False, imgsz=64)
+            self.yolo11_model = model
+            # Cache the model to our yolo-coco dir for next time
+            if not _YOLO11_PT.exists():
+                import shutil as _sh
+                local_pt = Path(model.ckpt_path)
+                if local_pt.exists():
+                    _YOLO11_DIR.mkdir(parents=True, exist_ok=True)
+                    _sh.copy2(str(local_pt), str(_YOLO11_PT))
+            logger.info(f"YOLOv11 (nano) loaded [OK] – {len(model.names)} classes")
+        except ImportError:
+            logger.warning("ultralytics package not installed – YOLOv11 unavailable")
+        except Exception as e:
+            logger.warning(f"Failed to load YOLOv11: {e}")
+
+    # ── YOLOv4-tiny (OpenCV DNN) ─────────────────────────────────────────
     def _load_yolo(self):
         if _YOLO_CFG.exists() and _YOLO_WEIGHTS.exists() and _YOLO_WEIGHTS.stat().st_size > 1_000_000:
             try:
@@ -256,17 +492,63 @@ class ModelManager:
         except Exception as e:
             logger.error(f"Voice model load failed: {e}")
 
+    # ── Custom YOLO Detection Model ──────────────────────────────────────
+    def _try_load_custom_yolo(self):
+        model_path = MODELS_DIR / "yolo_custom" / "best.pt"
+        meta_path  = MODELS_DIR / "yolo_custom" / "meta.json"
+        if not model_path.exists():
+            return
+        h = hashlib.md5(model_path.read_bytes()).hexdigest()
+        if h == self._custom_yolo_hash:
+            return
+        try:
+            from ultralytics import YOLO as UltralyticsYOLO
+            model = UltralyticsYOLO(str(model_path))
+            # Warm up
+            model.predict(np.zeros((64, 64, 3), dtype=np.uint8),
+                          verbose=False, imgsz=64)
+            meta = {}
+            if meta_path.exists():
+                meta = json.loads(meta_path.read_text())
+            with self._lock:
+                self._custom_yolo_model = model
+                self._custom_yolo_meta  = meta
+                self._custom_yolo_hash  = h
+            cls_count = len(meta.get("classes", model.names or {}))
+            logger.info(f"[HOT-RELOAD] Custom YOLO model loaded – {cls_count} classes")
+        except Exception as e:
+            logger.error(f"Custom YOLO model load failed: {e}")
+
     # ── Background watcher ───────────────────────────────────────────────
     def _watch_loop(self):
-        """Poll disk every 3 seconds for new / changed model files."""
+        """Poll disk every few seconds for new / changed model files."""
         import time
+        inactive_count = 0
+        loaders = {
+            self._try_load_image_model:  "_image_hash",
+            self._try_load_text_model:   "_text_hash",
+            self._try_load_voice_model:  "_voice_hash",
+            self._try_load_custom_yolo:  "_custom_yolo_hash",
+        }
         while not self._stop_event.is_set():
-            for loader in (self._try_load_image_model, self._try_load_text_model, self._try_load_voice_model):
+            changes_detected = False
+            for loader, hash_attr in loaders.items():
                 try:
+                    old_hash = getattr(self, hash_attr, None)
                     loader()
+                    new_hash = getattr(self, hash_attr, None)
+                    if old_hash != new_hash:
+                        changes_detected = True
                 except Exception as e:
                     logger.debug(f"Watcher skip {loader.__name__}: {e}")
-            time.sleep(3)
+
+            if changes_detected:
+                inactive_count = 0
+                time.sleep(3)
+            else:
+                inactive_count += 1
+                sleep_time = min(3 + inactive_count * 0.5, 10)
+                time.sleep(sleep_time)
 
     def stop(self):
         self._stop_event.set()
@@ -274,8 +556,12 @@ class ModelManager:
     # ── Public inference helpers ─────────────────────────────────────────
 
     def detect_objects(self, frame, confidence_threshold=0.3, nms_threshold=0.4):
-        """Run object detection. Uses YOLO if available, else SSD fallback.
+        """Run object detection.  Priority: Custom YOLO > YOLOv11 > YOLOv4-tiny > SSD.
         Returns list of {label, confidence, box, color}."""
+        if self._custom_yolo_model is not None:
+            return self._detect_custom_yolo(frame, confidence_threshold)
+        if self.yolo11_model is not None:
+            return self._detect_yolo11(frame, confidence_threshold)
         if self.yolo_net is not None:
             return self._detect_yolo(frame, confidence_threshold, nms_threshold)
         return self._detect_ssd(frame, confidence_threshold)
@@ -284,23 +570,72 @@ class ModelManager:
     def detect_ssd(self, frame, confidence_threshold=0.3):
         return self.detect_objects(frame, confidence_threshold)
 
+    def _detect_yolo11(self, frame, conf_thresh=0.3):
+        """YOLOv11 (Ultralytics) detection – 80 COCO classes. Best accuracy."""
+        results = self.yolo11_model.predict(
+            frame, conf=conf_thresh, verbose=False, imgsz=640)
+        dets = []
+        for r in results:
+            if r.boxes is None:
+                continue
+            for box in r.boxes:
+                x1, y1, x2, y2 = box.xyxy[0].int().tolist()
+                cid  = int(box.cls[0])
+                conf = float(box.conf[0])
+                label = self.yolo11_model.names.get(cid, f"class_{cid}")
+                dets.append({
+                    "label": label,
+                    "confidence": conf,
+                    "box": [max(0, x1), max(0, y1), x2, y2],
+                    "color": COCO_COLORS[cid % len(COCO_COLORS)].tolist(),
+                })
+        return dets
+
+    def _detect_custom_yolo(self, frame, conf_thresh=0.3):
+        """Custom-trained YOLO detection – user-defined classes."""
+        meta = self._custom_yolo_meta or {}
+        imgsz = meta.get("imgsz", 640)
+        results = self._custom_yolo_model.predict(
+            frame, conf=conf_thresh, verbose=False, imgsz=imgsz)
+        dets = []
+        for r in results:
+            if r.boxes is None:
+                continue
+            for box in r.boxes:
+                x1, y1, x2, y2 = box.xyxy[0].int().tolist()
+                cid  = int(box.cls[0])
+                conf = float(box.conf[0])
+                label = self._custom_yolo_model.names.get(cid, f"class_{cid}")
+                dets.append({
+                    "label": label,
+                    "confidence": conf,
+                    "box": [max(0, x1), max(0, y1), x2, y2],
+                    "color": COCO_COLORS[cid % len(COCO_COLORS)].tolist(),
+                })
+        return dets
+
     def _detect_yolo(self, frame, conf_thresh=0.3, nms_thresh=0.4):
-        """YOLOv4-tiny detection -- 80 COCO classes."""
-        (H, W) = frame.shape[:2]
-        blob = cv2.dnn.blobFromImage(frame, 1/255.0, (416, 416), swapRB=True, crop=False)
+        """YOLOv4-tiny detection -- 80 COCO classes. Optimized for speed."""
+        H, W = frame.shape[:2]
+        blob = cv2.dnn.blobFromImage(
+            frame, 1 / 255.0, (320, 320), swapRB=True, crop=False)
         self.yolo_net.setInput(blob)
         layer_outs = self.yolo_net.forward(self.yolo_output_layers)
 
+        # Pre-allocate lists with estimated capacity
         boxes, confidences, class_ids = [], [], []
+        scale_w, scale_h = W, H
+        
         for output in layer_outs:
             for detection in output:
+                # Vectorized operations for speed
                 scores = detection[5:]
                 class_id = int(np.argmax(scores))
                 conf = float(scores[class_id])
                 if conf > conf_thresh:
-                    cx, cy, bw, bh = (detection[0:4] * np.array([W, H, W, H])).astype(int)
-                    x = int(cx - bw / 2)
-                    y = int(cy - bh / 2)
+                    # Direct calculation without intermediate array
+                    cx, cy, bw, bh = detection[0] * scale_w, detection[1] * scale_h, detection[2] * scale_w, detection[3] * scale_h
+                    x, y = int(cx - bw * 0.5), int(cy - bh * 0.5)
                     boxes.append([x, y, int(bw), int(bh)])
                     confidences.append(conf)
                     class_ids.append(class_id)
@@ -325,9 +660,9 @@ class ModelManager:
         """MobileNet-SSD fallback -- 20 VOC classes."""
         if self.ssd_net is None:
             return []
-        (h, w) = frame.shape[:2]
+        h, w = frame.shape[:2]
         blob = cv2.dnn.blobFromImage(
-            cv2.resize(frame, (300, 300)), 0.007843, (300, 300), 127.5)
+            frame, 0.007843, (300, 300), 127.5)
         self.ssd_net.setInput(blob)
         detections = self.ssd_net.forward()
         results = []
@@ -347,6 +682,7 @@ class ModelManager:
     def classify_image_custom(self, frame):
         """Run custom image classifier. Returns (label, confidence) or None.
         Supports both 'classifier' (softmax) and 'embedding' (cosine distance) models.
+        Optimized for speed.
         """
         with self._lock:
             m = self._image_model
@@ -364,10 +700,13 @@ class ModelManager:
             img_size = m["img_size"]
             device   = m["device"]
 
-            img = cv2.resize(frame, (img_size, img_size))
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+            # Optimized preprocessing pipeline
+            img = cv2.resize(frame, (img_size, img_size), interpolation=cv2.INTER_LINEAR)
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            # Faster normalization and transpose
+            img = img.astype(np.float32, copy=False) * (1.0/255.0)
             img = np.transpose(img, (2, 0, 1))
-            tensor = torch.tensor(img).unsqueeze(0).to(device)
+            tensor = torch.from_numpy(img).unsqueeze(0).to(device, non_blocking=True)
 
             with torch.no_grad():
                 feat = model(tensor).squeeze().cpu().numpy()
@@ -386,16 +725,19 @@ class ModelManager:
                 return "background", min(max(conf, 0.5), 0.99)
 
         else:
-            # Standard classifier
+            # Standard classifier - optimized
             model   = m["model"]
             classes = m["classes"]
             img_size = m["img_size"]
             device  = m["device"]
 
-            img = cv2.resize(frame, (img_size, img_size))
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+            # Faster preprocessing
+            img = cv2.resize(frame, (img_size, img_size), interpolation=cv2.INTER_LINEAR)
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            img = img.astype(np.float32, copy=False) * (1.0/255.0)
             img = np.transpose(img, (2, 0, 1))
-            tensor = torch.tensor(img).unsqueeze(0).to(device)
+            tensor = torch.from_numpy(img).unsqueeze(0).to(device, non_blocking=True)
+            
             with torch.no_grad():
                 out   = model(tensor)
                 probs = torch.softmax(out, dim=1)
@@ -432,21 +774,94 @@ class ModelManager:
                 info[mt] = json.loads(meta_file.read_text())
             else:
                 info[mt] = None
+
+        # Custom YOLO detection model
+        custom_yolo_meta = MODELS_DIR / "yolo_custom" / "meta.json"
+        if custom_yolo_meta.exists():
+            info["yolo_custom"] = json.loads(custom_yolo_meta.read_text())
+        else:
+            info["yolo_custom"] = None
+
+        active_det = (
+            "Custom YOLO" if self._custom_yolo_model else
+            "YOLOv11" if self.yolo11_model else
+            "YOLOv4-tiny" if self.yolo_net else
+            "MobileNet-SSD" if self.ssd_net else "None"
+        )
+        det_classes = (
+            list(self._custom_yolo_model.names.values()) if self._custom_yolo_model else
+            list(self.yolo11_model.names.values()) if self.yolo11_model else
+            COCO_CLASSES if self.yolo_net else SSD_CLASSES
+        )
         info["ssd"] = {
-            "loaded": self.yolo_net is not None or self.ssd_net is not None,
-            "detector": "YOLOv4-tiny" if self.yolo_net else ("MobileNet-SSD" if self.ssd_net else "None"),
-            "classes": COCO_CLASSES if self.yolo_net else SSD_CLASSES,
+            "loaded": (self._custom_yolo_model is not None
+                       or self.yolo11_model is not None
+                       or self.yolo_net is not None
+                       or self.ssd_net is not None),
+            "detector": active_det,
+            "classes": det_classes,
         }
+        info["registry"] = model_registry.list_models()
         return info
+
+    def switch_adapter(self, target: str) -> dict:
+        """Thread-safe adapter switching (yolo_custom / yolo11 / yolo / ssd)."""
+        with self._lock:
+            if target == "yolo_custom":
+                self.yolo11_model = None
+                self.yolo_net = None
+                self.yolo_output_layers = None
+                self.ssd_net = None
+                if self._custom_yolo_model is None:
+                    self._try_load_custom_yolo()
+                if self._custom_yolo_model:
+                    meta = self._custom_yolo_meta or {}
+                    classes = meta.get("classes",
+                                       list(self._custom_yolo_model.names.values()))
+                    return {"ok": True, "active": "Custom YOLO",
+                            "classes": classes}
+                return {"ok": False,
+                        "error": "No custom YOLO model trained yet"}
+            elif target == "yolo11":
+                self._custom_yolo_model = None
+                self.yolo_net = None
+                self.yolo_output_layers = None
+                self.ssd_net = None
+                if self.yolo11_model is None:
+                    self._load_yolo11()
+                if self.yolo11_model:
+                    return {"ok": True, "active": "YOLOv11"}
+                return {"ok": False, "error": "ultralytics not installed – pip install ultralytics"}
+            elif target == "yolo":
+                self._custom_yolo_model = None
+                self.yolo11_model = None
+                self.ssd_net = None
+                if self.yolo_net is None:
+                    self._load_yolo()
+                if self.yolo_net:
+                    return {"ok": True, "active": "YOLOv4-tiny"}
+                return {"ok": False, "error": "YOLO weights not found"}
+            elif target == "ssd":
+                self._custom_yolo_model = None
+                self.yolo11_model = None
+                self.yolo_net = None
+                self.yolo_output_layers = None
+                self._load_ssd()
+                if self.ssd_net:
+                    return {"ok": True, "active": "MobileNet-SSD"}
+                return {"ok": False, "error": "SSD weights not found"}
+        return {"ok": False, "error": "Unknown model"}
 
     def force_reload(self):
         """Force reload all models now."""
         self._image_hash = None
         self._text_hash  = None
         self._voice_hash = None
+        self._custom_yolo_hash = None
         self._try_load_image_model()
         self._try_load_text_model()
         self._try_load_voice_model()
+        self._try_load_custom_yolo()
 
 
 # singleton

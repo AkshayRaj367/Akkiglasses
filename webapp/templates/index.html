@@ -129,7 +129,7 @@ input,select,textarea,button{font:inherit}
   margin-bottom:1.5rem;
 }
 .hero h1{font-size:3.2rem;font-weight:900;letter-spacing:-1.2px;line-height:1.15;margin-bottom:1rem}
-.hero h1 span{background:linear-gradient(135deg,var(--accent),#7c3aed);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero h1 span{background:linear-gradient(135deg,var(--accent),#7c3aed);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
 .hero p{font-size:1.1rem;color:var(--muted);max-width:580px;margin:0 auto 2.5rem}
 
 .feat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1.25rem;margin:3rem 0}
@@ -260,6 +260,52 @@ input,select,textarea,button{font:inherit}
 .hidden{display:none!important}
 .mt-1{margin-top:.5rem}.mt-2{margin-top:1rem}.mt-3{margin-top:1.5rem}
 .flex{display:flex}.gap-2{gap:.5rem}.gap-3{gap:1rem}
+
+/* ──── Image Detection Results Layout ──── */
+.img-detection-results {
+  display: flex; gap: 1rem; margin-top: 1rem;
+  flex-wrap: wrap;
+}
+.img-detection-image {
+  flex: 1; min-width: 300px;
+}
+.img-detection-image img {
+  width: 100%; max-width: 500px; border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+.img-detection-details {
+  flex: 1; min-width: 280px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 1rem;
+}
+.detection-summary {
+  font-size: 1.1em; font-weight: 600; color: var(--green);
+  margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;
+}
+.detection-list {
+  display: flex; flex-direction: column; gap: 0.5rem;
+}
+.detection-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0.5rem; background: var(--bg); border-radius: var(--radius-sm);
+  border-left: 3px solid var(--accent);
+}
+.detection-item.custom {
+  border-left-color: var(--orange);
+  background: var(--orange-bg);
+}
+.detection-label {
+  font-weight: 500; color: var(--text);
+}
+.detection-conf {
+  font-size: 0.9em; color: var(--accent); font-weight: 600;
+}
+.detection-item.custom .detection-conf {
+  color: var(--orange);
+}
+@media (max-width: 768px) {
+  .img-detection-results { flex-direction: column; }
+}
 </style>
 </head>
 <body>
@@ -277,16 +323,30 @@ input,select,textarea,button{font:inherit}
   </div>
   <div class="adapter-badge" id="adapterBadge" onclick="toggleAdapterDD()">
     <span class="live-dot"></span>
-    <span id="adapterLabel">&#9889; YOLOv4-tiny</span>
+    <span id="adapterLabel">&#128171; YOLOv11</span>
     <span style="font-size:.7rem;color:#a5b4fc">&#9660;</span>
   </div>
   <div class="adapter-dropdown" id="adapterDD">
     <div class="adapter-dd-head">&#128268; Switch Detection Adapter</div>
-    <div class="adapter-opt active" data-m="yolo" onclick="switchAdapter('yolo',this)">
+    <div class="adapter-opt" data-m="yolo_custom" onclick="switchAdapter('yolo_custom',this)">
+      <div class="radio"></div>
+      <div class="adapter-opt-text">
+        <strong>&#127919; Custom YOLO</strong>
+        <small>Your trained model &middot; custom classes</small>
+      </div>
+    </div>
+    <div class="adapter-opt active" data-m="yolo11" onclick="switchAdapter('yolo11',this)">
+      <div class="radio"></div>
+      <div class="adapter-opt-text">
+        <strong>&#128171; YOLOv11</strong>
+        <small>80 COCO classes &middot; state-of-the-art accuracy</small>
+      </div>
+    </div>
+    <div class="adapter-opt" data-m="yolo" onclick="switchAdapter('yolo',this)">
       <div class="radio"></div>
       <div class="adapter-opt-text">
         <strong>&#9889; YOLOv4-tiny</strong>
-        <small>80 COCO classes &middot; fast &amp; accurate</small>
+        <small>80 COCO classes &middot; fast &amp; lightweight</small>
       </div>
     </div>
     <div class="adapter-opt" data-m="ssd" onclick="switchAdapter('ssd',this)">
@@ -306,7 +366,7 @@ input,select,textarea,button{font:inherit}
   <div class="hero">
     <div class="hero-badge">&#10024; AI-Powered Smart Glasses Platform</div>
     <h1>See the World Through<br><span>Intelligent Eyes</span></h1>
-    <p>Real-time object detection with YOLO &amp; MobileNet-SSD. Upload datasets, train custom models, and deploy &mdash; all from your browser.</p>
+    <p>Real-time object detection with YOLOv11 &amp; custom-trained YOLO models. Upload datasets, train your own detector, and deploy &mdash; all from your browser.</p>
     <div class="flex gap-3" style="justify-content:center">
       <button class="btn btn-accent" onclick="go('detect')">&#128247; Start Detection</button>
       <button class="btn btn-ghost" onclick="go('train')">&#128640; Train a Model</button>
@@ -327,7 +387,7 @@ input,select,textarea,button{font:inherit}
     <div class="card feat">
       <span class="emoji">&#128260;</span>
       <h3>Adapter Switching</h3>
-      <p>Hot-swap between YOLOv4-tiny, MobileNet-SSD, and custom-trained models without restarting the server.</p>
+      <p>Hot-swap between YOLOv11, YOLOv4-tiny, MobileNet-SSD, and custom-trained models without restarting the server.</p>
     </div>
     <div class="card feat">
       <span class="emoji">&#128421;</span>
@@ -340,7 +400,7 @@ input,select,textarea,button{font:inherit}
     <div class="about-av">AR</div>
     <div class="about-text">
       <h4>Akshay Raj</h4>
-      <p>Smart Glasses Project &mdash; Object Detection with OpenCV, YOLOv4, MobileNet-SSD, and PyTorch. Built for wearable AI applications.</p>
+      <p>Smart Glasses Project &mdash; Object Detection with OpenCV, YOLOv11, YOLOv4, MobileNet-SSD, and PyTorch. Built for wearable AI applications.</p>
     </div>
   </div>
 </div>
@@ -351,7 +411,7 @@ input,select,textarea,button{font:inherit}
 <div class="page-wrap">
   <div class="page-header">
     <h2>&#128247; Live Detection</h2>
-    <span class="tag" id="detAdapterTag" style="background:var(--accent-light);color:var(--accent)">&#9889; YOLOv4-tiny</span>
+    <span class="tag" id="detAdapterTag" style="background:var(--accent-light);color:var(--accent)">&#128171; YOLOv11</span>
   </div>
 
   <div class="det-grid">
@@ -380,7 +440,9 @@ input,select,textarea,button{font:inherit}
           <p>JPG, PNG, BMP, TIFF, WebP supported</p>
           <input type="file" id="imgIn" accept="image/*" class="hidden" onchange="detectImg(this)">
         </div>
-        <div id="imgResult" class="hidden mt-2"></div>
+        <div id="imgResult" class="hidden mt-2">
+          <!-- Results will be displayed here in a side-by-side layout -->
+        </div>
       </div>
 
       <!-- Terminal -->
@@ -399,22 +461,55 @@ input,select,textarea,button{font:inherit}
     <div class="side-col">
       <div class="card">
         <div class="card-label">&#128202; Statistics</div>
-        <div class="stat-row"><span class="stat-k">&#128268; Adapter</span><span class="stat-v" id="sAdapter">YOLOv4-tiny</span></div>
+        <div class="stat-row"><span class="stat-k">&#128268; Adapter</span><span class="stat-v" id="sAdapter">YOLOv11</span></div>
         <div class="stat-row"><span class="stat-k">&#9889; FPS</span><span class="stat-v" id="sFps">--</span></div>
         <div class="stat-row"><span class="stat-k">&#128230; Objects</span><span class="stat-v" id="sObj">0</span></div>
         <div class="stat-row"><span class="stat-k">&#127909; Camera</span><span class="stat-v" id="sCam">Off</span></div>
+        <div class="stat-row"><span class="stat-k">&#128247; Resolution</span><span class="stat-v" id="sRes">--</span></div>
       </div>
       <div class="card">
         <div class="card-label">&#9889; FPS Mode</div>
         <select class="form-input" id="fpsMode" onchange="switchFpsMode(this.value)" style="margin-bottom:.75rem">
-          <option value="ultra">⚡ Ultra (200+ FPS)</option>
-          <option value="high">🚀 High (100+ FPS)</option>
-          <option value="balanced">⚖️ Balanced (30-60 FPS)</option>
+          <option value="ultra">⚡ Ultra (Max FPS – detect every 8th frame)</option>
+          <option value="high">🚀 High (High FPS – detect every 4th frame)</option>
+          <option value="balanced">⚖️ Balanced (Balanced – detect every 2nd frame)</option>
         </select>
         <div style="font-size:.8rem;color:var(--muted);line-height:1.4">
-          <div id="fpsDesc">Max FPS, detect every 10th frame</div>
+          <div id="fpsDesc">Max FPS, detect every 8th frame</div>
           <div id="fpsStatus" class="mt-1" style="color:var(--accent)">Current: <span id="currentFps">Ultra</span></div>
         </div>
+      </div>
+      <div class="card">
+        <div class="card-label">&#128266; Voice Announcer</div>
+        <div class="flex gap-2" style="align-items:center;margin-bottom:.75rem">
+          <button class="btn btn-accent" id="ttsBtn" onclick="toggleTTS()" style="flex:1">
+            <span id="ttsIcon">&#128264;</span> <span id="ttsLabel">Enable</span>
+          </button>
+        </div>
+        <div style="font-size:.82rem;color:var(--muted);line-height:1.6">
+          <label style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+            <span style="min-width:70px">Cooldown</span>
+            <input type="range" id="ttsCooldown" min="2" max="15" step="1" value="5"
+                   oninput="updateTTSSetting('cooldown',this.value);document.getElementById('ttsCdVal').textContent=this.value+'s'"
+                   style="flex:1">
+            <span id="ttsCdVal" style="min-width:28px;text-align:right">5s</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+            <span style="min-width:70px">Speed</span>
+            <input type="range" id="ttsRate" min="100" max="250" step="5" value="175"
+                   oninput="updateTTSSetting('rate',this.value);document.getElementById('ttsRateVal').textContent=this.value"
+                   style="flex:1">
+            <span id="ttsRateVal" style="min-width:28px;text-align:right">175</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px">
+            <span style="min-width:70px">Volume</span>
+            <input type="range" id="ttsVol" min="0" max="100" step="5" value="90"
+                   oninput="updateTTSSetting('volume',this.value/100);document.getElementById('ttsVolVal').textContent=this.value+'%'"
+                   style="flex:1">
+            <span id="ttsVolVal" style="min-width:28px;text-align:right">90%</span>
+          </label>
+        </div>
+        <div id="ttsStatus" style="font-size:.78rem;color:var(--accent);margin-top:.5rem">Voice: Off</div>
       </div>
       <div class="card">
         <div class="card-label">&#127919; Detected Objects</div>
@@ -495,9 +590,13 @@ input,select,textarea,button{font:inherit}
   <div class="page-header">
     <h2>&#129520; Models</h2>
     <span style="flex:1"></span>
-    <button class="btn btn-ghost" onclick="loadModels()">&#128260; Reload</button>
+    <button class="btn btn-ghost btn-sm" onclick="loadModels()">&#128260; Reload</button>
+    <button class="btn btn-accent btn-sm" onclick="reloadAllModels()" style="margin-left:6px">&#9889; Force Reload</button>
   </div>
   <div class="models-grid" id="modelsGrid"><div class="card"><p style="color:var(--muted)">Loading...</p></div></div>
+  <h3 style="margin-top:2rem;font-size:1.15rem;font-weight:700">&#128451; Model Registry (All Trained Models)</h3>
+  <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">All trained models are stored here. Activate any model to switch, or delete unused ones.</p>
+  <div class="models-grid" id="registryGrid"><div class="card"><p style="color:var(--muted)">Loading...</p></div></div>
 </div>
 </div>
 
@@ -546,10 +645,15 @@ async function switchAdapter(m,el){
   document.getElementById('adapterDD').classList.remove('open');
 }
 function setAdapterUI(name){
-  const emoji=name.includes('YOLO')?'\u26A1':'\uD83D\uDCF1';
+  const emoji=name.includes('Custom')?'\uD83C\uDFAF':name.includes('v11')?'\uD83D\uDCAB':name.includes('YOLO')?'\u26A1':'\uD83D\uDCF1';
   document.getElementById('adapterLabel').innerHTML=emoji+' '+name;
   document.getElementById('sAdapter').textContent=name;
   document.getElementById('detAdapterTag').innerHTML=emoji+' '+name;
+  // Sync radio selection
+  const key=name.includes('Custom')?'yolo_custom':name.includes('v11')?'yolo11':name.includes('v4')||name.includes('tiny')?'yolo':'ssd';
+  document.querySelectorAll('.adapter-opt').forEach(o=>{
+    o.classList.toggle('active',o.dataset.m===key);
+  });
 }
 
 /* ──── Camera ──── */
@@ -582,6 +686,7 @@ async function pollDets(){
   try{
     const r=await fetch('/api/video/detections');const d=await r.json();
     document.getElementById('sFps').textContent=d.fps||'--';
+    if(d.resolution)document.getElementById('sRes').textContent=d.resolution;
     const dets=d.detections||[];
     document.getElementById('sObj').textContent=dets.length;
     if(!dets.length){document.getElementById('detList').innerHTML='<p style="color:var(--muted);font-size:.85rem">No objects detected</p>';return}
@@ -594,10 +699,59 @@ async function detectImg(inp){
   if(!inp.files[0])return;
   const fd=new FormData();fd.append('file',inp.files[0]);
   const el=document.getElementById('imgResult');
-  el.innerHTML='<p style="color:var(--muted)">&#9203; Detecting...</p>';el.classList.remove('hidden');
+  el.innerHTML='<p style="color:var(--muted)">&#9203; Detecting objects...</p>';el.classList.remove('hidden');
   try{
     const r=await fetch('/api/detect/image',{method:'POST',body:fd});const d=await r.json();
-    if(d.ok){el.innerHTML=`<img src="data:image/jpeg;base64,${d.image}" style="border-radius:10px"><p class="mt-1" style="font-size:.88rem;font-weight:600">\u2705 ${d.total} object(s) detected</p>`;toast(d.total+' object(s) found','success')}
+    if(d.ok){
+      // Create detailed results layout
+      let detailsHtml = `
+        <div class="img-detection-results">
+          <div class="img-detection-image">
+            <img src="data:image/jpeg;base64,${d.image}" alt="Detection Result">
+          </div>
+          <div class="img-detection-details">
+            <div class="detection-summary">
+              <span>✅</span>
+              <span>${d.total} object(s) detected</span>
+            </div>`;
+      
+      if (d.detections && d.detections.length > 0) {
+        detailsHtml += '<div class="detection-list">';
+        d.detections.forEach(det => {
+          const conf = (det.confidence * 100).toFixed(1);
+          detailsHtml += `
+            <div class="detection-item">
+              <span class="detection-label">${det.label}</span>
+              <span class="detection-conf">${conf}%</span>
+            </div>`;
+        });
+        detailsHtml += '</div>';
+      }
+      
+      if (d.custom && d.custom.length > 0) {
+        if (d.detections && d.detections.length > 0) {
+          detailsHtml += '<div style="margin: 1rem 0; border-top: 1px solid var(--border); padding-top: 1rem;"></div>';
+        }
+        detailsHtml += '<div class="detection-list">';
+        d.custom.forEach(cust => {
+          const conf = (cust.confidence * 100).toFixed(1);
+          detailsHtml += `
+            <div class="detection-item custom">
+              <span class="detection-label">${cust.label}</span>
+              <span class="detection-conf">${conf}%</span>
+            </div>`;
+        });
+        detailsHtml += '</div>';
+      }
+      
+      if (d.total === 0) {
+        detailsHtml += '<p style="color: var(--muted); font-style: italic;">No objects detected in this image.</p>';
+      }
+      
+      detailsHtml += '</div></div>';
+      el.innerHTML = detailsHtml;
+      toast(`${d.total} object(s) detected`,'success');
+    }
     else el.innerHTML=`<p style="color:var(--red)">${d.error}</p>`;
   }catch(e){el.innerHTML='<p style="color:var(--red)">Upload failed</p>'}
   inp.value='';
@@ -745,11 +899,14 @@ function initChart(){
 /* ──── Models Page ──── */
 async function loadModels(){
   const g=document.getElementById('modelsGrid');
+  const rg=document.getElementById('registryGrid');
   g.innerHTML='<div class="card"><p style="color:var(--muted)">\u23F3 Loading...</p></div>';
+  rg.innerHTML='<div class="card"><p style="color:var(--muted)">\u23F3 Loading...</p></div>';
   try{
-    const[mr,hr]=await Promise.all([fetch('/api/models'),fetch('/api/models/history')]);
-    const models=await mr.json(),history=await hr.json();
+    const[mr,regr]=await Promise.all([fetch('/api/models'),fetch('/api/models/registry')]);
+    const models=await mr.json(), registry=await regr.json();
     g.innerHTML='';
+    // Active detector card
     if(models.ssd){
       const s=models.ssd;
       const card=document.createElement('div');card.className='card';
@@ -765,39 +922,90 @@ async function loadModels(){
         </div>
       `;g.appendChild(card);
     }
-    for(const item of history){
-      const card=document.createElement('div');card.className='card';
-      const tl=(item.type||'custom').charAt(0).toUpperCase()+(item.type||'').slice(1);
-      const emoji=item.type==='image'?'\uD83D\uDDBC\uFE0F':item.type==='voice'?'\uD83C\uDFA4':'\uD83D\uDCDD';
-      card.innerHTML=`
-        <div class="m-head">
-          <div class="m-ico" style="background:var(--green-bg);color:var(--green-text)">${emoji}</div>
-          <h3>${tl} Model</h3>
-        </div>
-        <div class="m-meta">
-          <span>\uD83C\uDFF7\uFE0F Classes: ${Array.isArray(item.classes)?item.classes.join(', '):'--'}</span>
-          ${item.accuracy!=null?`<span>\uD83C\uDFAF Accuracy: ${(item.accuracy*100).toFixed(1)}%</span>`:''}
-          ${item.trained_at?`<span>\uD83D\uDCC5 Trained: ${item.trained_at}</span>`:''}
-          <span>Status: <span class="badge badge-on">\u2705 Ready</span></span>
-        </div>
-      `;g.appendChild(card);
-    }
+    // Active custom models
     for(const mt of['image','voice','text']){
-      if(!models[mt]&&!history.find(h=>h.type===mt)){
+      if(models[mt]){
+        const item=models[mt];
         const card=document.createElement('div');card.className='card';
-        const label=mt.charAt(0).toUpperCase()+mt.slice(1);
+        const emoji=mt==='image'?'\uD83D\uDDBC\uFE0F':mt==='voice'?'\uD83C\uDFA4':'\uD83D\uDCDD';
+        const tl=mt.charAt(0).toUpperCase()+mt.slice(1);
+        card.innerHTML=`
+          <div class="m-head">
+            <div class="m-ico" style="background:var(--green-bg);color:var(--green-text)">${emoji}</div>
+            <h3>${tl} Model <span class="badge badge-on" style="margin-left:6px">Active</span></h3>
+          </div>
+          <div class="m-meta">
+            <span>\uD83C\uDFF7\uFE0F Classes: ${Array.isArray(item.classes)?item.classes.join(', '):'--'}</span>
+            ${item.accuracy!=null?`<span>\uD83C\uDFAF Accuracy: ${(item.accuracy*100).toFixed(1)}%</span>`:''}
+            ${item.trained_at?`<span>\uD83D\uDCC5 Trained: ${new Date(item.trained_at).toLocaleString()}</span>`:''}
+          </div>
+        `;g.appendChild(card);
+      }else{
+        const card=document.createElement('div');card.className='card';
         const emoji=mt==='image'?'\uD83D\uDDBC\uFE0F':mt==='voice'?'\uD83C\uDFA4':'\uD83D\uDCDD';
         card.innerHTML=`
           <div class="m-head">
             <div class="m-ico" style="background:var(--bg);color:var(--muted)">${emoji}</div>
-            <h3>${label} Model</h3>
+            <h3>${mt.charAt(0).toUpperCase()+mt.slice(1)} Model</h3>
           </div>
           <div class="m-meta"><span>Status: <span class="badge badge-off">No model trained</span></span></div>
         `;g.appendChild(card);
       }
     }
-    if(!g.children.length)g.innerHTML='<div class="card"><p style="color:var(--muted)">No models found</p></div>';
-  }catch(e){g.innerHTML='<div class="card"><p style="color:var(--red)">Failed to load</p></div>'}
+    // Registry grid (all stored models)
+    rg.innerHTML='';
+    if(!registry.length){
+      rg.innerHTML='<div class="card"><p style="color:var(--muted)">No models stored yet. Train a model to see it here.</p></div>';
+    }else{
+      for(const m of registry){
+        const card=document.createElement('div');card.className='card';
+        const emoji=m.type==='image'?'\uD83D\uDDBC\uFE0F':m.type==='voice'?'\uD83C\uDFA4':'\uD83D\uDCDD';
+        const isActive=m.active;
+        card.innerHTML=`
+          <div class="m-head">
+            <div class="m-ico" style="background:${isActive?'var(--green-bg)':'var(--bg)'};color:${isActive?'var(--green-text)':'var(--muted)'}">${emoji}</div>
+            <h3 style="font-size:.95rem">${m.name||m.id}</h3>
+          </div>
+          <div class="m-meta">
+            <span>\uD83C\uDFF7\uFE0F Type: ${m.type} &middot; ${Array.isArray(m.classes)?m.classes.length:0} classes</span>
+            ${m.accuracy!=null?`<span>\uD83C\uDFAF Accuracy: ${(m.accuracy*100).toFixed(1)}%</span>`:''}
+            ${m.trained_at?`<span>\uD83D\uDCC5 ${new Date(m.trained_at).toLocaleString()}</span>`:''}
+            <span>Status: ${isActive?'<span class="badge badge-on">\u2705 Active</span>':'<span class="badge badge-off">Stored</span>'}</span>
+          </div>
+          <div class="flex gap-2 mt-1">
+            ${!isActive?`<button class="btn btn-accent btn-sm" onclick="activateModel('${m.id}')">\u2705 Activate</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteModel('${m.id}')">\uD83D\uDDD1 Delete</button>`
+              :'<span style="font-size:.8rem;color:var(--green);font-weight:600">Currently active</span>'}
+          </div>
+        `;rg.appendChild(card);
+      }
+    }
+  }catch(e){g.innerHTML='<div class="card"><p style="color:var(--red)">Failed to load</p></div>';rg.innerHTML='';}
+}
+
+async function activateModel(id){
+  try{
+    const r=await fetch('/api/models/registry/activate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});
+    const d=await r.json();
+    if(d.ok){toast('Model activated: '+id,'success');loadModels();}else toast(d.error||'Activation failed','error');
+  }catch(e){toast('Network error','error');}
+}
+
+async function deleteModel(id){
+  if(!confirm('Delete model '+id+'? This cannot be undone.'))return;
+  try{
+    const r=await fetch('/api/models/registry/'+id,{method:'DELETE'});
+    const d=await r.json();
+    if(d.ok){toast('Model deleted','success');loadModels();}else toast(d.error||'Delete failed','error');
+  }catch(e){toast('Network error','error');}
+}
+
+async function reloadAllModels(){
+  try{
+    await fetch('/api/models/reload',{method:'POST'});
+    toast('Models force-reloaded','success');
+    loadModels();
+  }catch(e){toast('Network error','error');}
 }
 
 /* ──── Drag & drop ──── */
@@ -830,9 +1038,9 @@ async function switchFpsMode(mode){
 
 function updateFpsUI(mode,data){
   const descriptions={
-    ultra:'Max FPS, detect every 10th frame',
-    high:'High FPS, detect every 5th frame',
-    balanced:'Normal FPS, detect every frame'
+    ultra:'Max FPS, detect every 8th frame',
+    high:'High FPS, detect every 4th frame',
+    balanced:'Balanced, detect every 2nd frame',
   };
   document.getElementById('fpsDesc').textContent=descriptions[mode];
   document.getElementById('currentFps').textContent=mode.charAt(0).toUpperCase()+mode.slice(1);
@@ -851,12 +1059,81 @@ async function loadFpsMode(){
   }
 }
 
+/* ──── TTS Announcer Control ──── */
+let ttsEnabled = false;
+
+async function toggleTTS() {
+  try {
+    const r = await fetch('/api/tts/toggle', {method:'POST', headers:{'Content-Type':'application/json'}});
+    const d = await r.json();
+    if (d.ok) {
+      ttsEnabled = d.enabled;
+      updateTTSUI(d.enabled);
+      toast(d.message, 'success');
+    } else {
+      toast(d.error || 'TTS toggle failed', 'error');
+    }
+  } catch(e) { toast('Network error', 'error'); }
+}
+
+function updateTTSUI(enabled) {
+  ttsEnabled = enabled;
+  const btn = document.getElementById('ttsBtn');
+  const icon = document.getElementById('ttsIcon');
+  const label = document.getElementById('ttsLabel');
+  const statusEl = document.getElementById('ttsStatus');
+  if (enabled) {
+    btn.style.background = 'var(--green)';
+    icon.innerHTML = '&#128266;';
+    label.textContent = 'Announcing';
+    statusEl.innerHTML = '&#128266; Voice: <strong>ON</strong> — objects will be announced';
+    statusEl.style.color = 'var(--green)';
+  } else {
+    btn.style.background = '';
+    icon.innerHTML = '&#128264;';
+    label.textContent = 'Enable';
+    statusEl.innerHTML = 'Voice: Off';
+    statusEl.style.color = 'var(--muted)';
+  }
+}
+
+async function updateTTSSetting(key, value) {
+  try {
+    const body = {};
+    body[key] = Number(value);
+    await fetch('/api/tts/settings', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+  } catch(e) { /* silent */ }
+}
+
+async function loadTTSState() {
+  try {
+    const r = await fetch('/api/tts');
+    const d = await r.json();
+    updateTTSUI(d.enabled);
+    document.getElementById('ttsCooldown').value = d.cooldown;
+    document.getElementById('ttsCdVal').textContent = d.cooldown + 's';
+    document.getElementById('ttsRate').value = d.rate;
+    document.getElementById('ttsRateVal').textContent = d.rate;
+    document.getElementById('ttsVol').value = Math.round(d.volume * 100);
+    document.getElementById('ttsVolVal').textContent = Math.round(d.volume * 100) + '%';
+    if (!d.tts_available) {
+      document.getElementById('ttsStatus').innerHTML = '&#9888; pyttsx3 not installed';
+      document.getElementById('ttsStatus').style.color = 'var(--red, #ef4444)';
+    }
+  } catch(e) { console.warn('TTS status load failed:', e); }
+}
+
 /* ──── Init ──── */
 document.addEventListener('DOMContentLoaded',()=>{
   fetch('/api/models').then(r=>r.json()).then(d=>{
-    if(d.ssd){const n=d.ssd.detector||'YOLOv4-tiny';setAdapterUI(n)}
+    if(d.ssd){const n=d.ssd.detector||'YOLOv11';setAdapterUI(n)}
   }).catch(()=>{});
   loadFpsMode();  // Load current FPS mode
+  loadTTSState(); // Load TTS state
 });
 </script>
 </body>

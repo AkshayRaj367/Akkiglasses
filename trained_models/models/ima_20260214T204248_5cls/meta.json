@@ -1,0 +1,13 @@
+{
+  "classes": [
+    "daisy",
+    "dandelion",
+    "rose",
+    "sunflower",
+    "tulip"
+  ],
+  "img_size": 224,
+  "accuracy": 0.9472727272727273,
+  "trained_at": "2026-02-14T20:42:48.147458",
+  "model_type": "classifier"
+}

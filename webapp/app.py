@@ -61,8 +61,10 @@ logging.getLogger().addHandler(_buf_handler)
 
 # -- local modules ---------------------------------------------------------
 from model_manager import manager as model_mgr
+from model_manager import model_registry
 from video_stream  import VideoStream
 from trainer       import run_training, status as train_status, detect_dataset_type
+from announcer     import announcer as tts_announcer
 
 import cv2
 import numpy as np
@@ -78,7 +80,7 @@ app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024 * 1024  # 2 GB
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 
 # -- video stream singleton ------------------------------------------------
-video_stream = VideoStream(model_mgr, src=0, fps_mode="ultra")  # 200+ FPS mode
+video_stream = VideoStream(model_mgr, src=0, fps_mode="balanced")  # Default: balanced mode
 
 # -- training thread handle ------------------------------------------------
 _train_thread = None
@@ -123,61 +125,47 @@ def api_video_feed():
 
 @app.route("/api/video/detections")
 def api_video_detections():
+    cam_info = video_stream.get_camera_info()
     return jsonify({
         "fps": round(video_stream.fps, 1),
         "detections": video_stream.get_detections(),
+        "resolution": f"{cam_info['width']}x{cam_info['height']}",
     })
 
 
 @app.route("/api/video/fps-mode", methods=["GET", "POST"])
 def api_video_fps_mode():
-    """Get or set video stream FPS optimization mode."""
-    global video_stream
-    
+    """Get or set video stream FPS optimization mode (in-place switch)."""
     if request.method == "GET":
-        # Return current mode based on settings
-        if video_stream.detection_interval >= 10:
-            mode = "ultra"
-        elif video_stream.detection_interval >= 5:
-            mode = "high" 
-        else:
-            mode = "balanced"
+        mode = video_stream._fps_mode
         return jsonify({
             "ok": True,
             "current_mode": mode,
             "fps": round(video_stream.fps, 1),
             "detection_interval": video_stream.detection_interval,
             "modes": {
-                "ultra": {"fps": "200+", "description": "Max FPS, detect every 10th frame"},
-                "high": {"fps": "100+", "description": "High FPS, detect every 5th frame"}, 
-                "balanced": {"fps": "30-60", "description": "Normal FPS, detect every frame"}
-            }
+                "ultra": {"fps": "Max", "description": "Max FPS, detect every 8th frame"},
+                "high":  {"fps": "High", "description": "High FPS, detect every 4th frame"},
+                "balanced": {"fps": "Balanced", "description": "Balanced, detect every 2nd frame"},
+            },
         })
-    
+
     data = request.get_json() or {}
     new_mode = data.get("mode", "").lower()
-    
+
     if new_mode not in ("ultra", "high", "balanced"):
-        return jsonify({"ok": False, "error": "Invalid mode. Use: ultra, high, balanced"}), 400
-    
-    # Stop current stream
-    was_running = video_stream.is_running
-    if was_running:
-        video_stream.stop()
-    
-    # Create new stream with different mode
-    video_stream = VideoStream(model_mgr, src=0, fps_mode=new_mode)
-    
-    # Restart if it was running
-    if was_running:
-        video_stream.start()
-    
+        return jsonify({"ok": False,
+                        "error": "Invalid mode. Use: ultra, high, balanced"}), 400
+
+    # In-place switch — no stream recreation needed
+    video_stream.set_fps_mode(new_mode)
+
     return jsonify({
         "ok": True,
         "message": f"FPS mode switched to {new_mode}",
         "mode": new_mode,
         "detection_interval": video_stream.detection_interval,
-        "estimated_fps": "200+" if new_mode == "ultra" else "100+" if new_mode == "high" else "30-60"
+        "estimated_fps": "Max" if new_mode == "ultra" else "High" if new_mode == "high" else "Balanced",
     })
 
 
@@ -525,44 +513,22 @@ def api_models_reload():
 
 @app.route("/api/models/history")
 def api_models_history():
-    from pathlib import Path as P
-    models_dir = P(__file__).resolve().parent.parent / "trained_models"
-    history = []
-    for mt in ("image", "voice", "text"):
-        meta_f = models_dir / f"{mt}_model" / "meta.json"
-        if meta_f.exists():
-            try:
-                meta = json.loads(meta_f.read_text())
-                meta["type"] = mt
-                meta["model_file"] = str(models_dir / f"{mt}_model" / (
-                    "model.pth" if mt in ("image","voice") else "model.pkl"))
-                history.append(meta)
-            except Exception:
-                pass
-    history.sort(key=lambda x: x.get("trained_at",""), reverse=True)
+    """Return all models from the registry (not just active)."""
+    history = model_registry.list_models()
+    # Sort by trained_at descending
+    history.sort(key=lambda x: x.get("trained_at", ""), reverse=True)
     return jsonify(history)
 
 
 @app.route("/api/models/switch", methods=["POST"])
 def api_models_switch():
-    """Switch the active detection model (yolo / ssd / custom-only)."""
+    """Switch the active detection model (yolo11 / yolo / ssd) — thread-safe."""
     d = request.get_json(force=True, silent=True) or {}
-    target = d.get("model", "yolo")
-    if target == "yolo":
-        if model_mgr.yolo_net is None:
-            model_mgr._load_yolo()
-        if model_mgr.yolo_net:
-            model_mgr.ssd_net = None
-            return jsonify({"ok": True, "active": "YOLOv4-tiny"})
-        return jsonify({"ok": False, "error": "YOLO weights not found"}), 404
-    elif target == "ssd":
-        model_mgr.yolo_net = None
-        model_mgr._load_ssd()
-        if model_mgr.ssd_net:
-            return jsonify({"ok": True, "active": "MobileNet-SSD"})
-        return jsonify({"ok": False, "error": "SSD weights not found"}), 404
-    else:
-        return jsonify({"ok": False, "error": "Unknown model"}), 400
+    target = d.get("model", "yolo11")
+    result = model_mgr.switch_adapter(target)
+    if result["ok"]:
+        return jsonify(result)
+    return jsonify(result), 404
 
 
 # =====================================================================
@@ -583,12 +549,93 @@ def api_classify_text():
 
 
 # =====================================================================
+#  TTS ANNOUNCER API  (Smart Glasses Speaker)
+# =====================================================================
+
+@app.route("/api/tts", methods=["GET"])
+def api_tts_status():
+    """Get current TTS announcer settings."""
+    return jsonify(tts_announcer.get_settings())
+
+
+@app.route("/api/tts/toggle", methods=["POST"])
+def api_tts_toggle():
+    """Toggle TTS on/off, or set explicitly with {enable: true/false}."""
+    d = request.get_json(force=True, silent=True) or {}
+    if "enable" in d:
+        tts_announcer.enabled = bool(d["enable"])
+    else:
+        tts_announcer.enabled = not tts_announcer.enabled
+    state = "on" if tts_announcer.enabled else "off"
+    return jsonify({"ok": True, "enabled": tts_announcer.enabled,
+                    "message": f"Voice announcements {state}"})
+
+
+@app.route("/api/tts/settings", methods=["POST"])
+def api_tts_settings():
+    """Update TTS settings: rate, volume, cooldown."""
+    d = request.get_json(force=True, silent=True) or {}
+    if "rate" in d:
+        tts_announcer.rate = int(d["rate"])
+    if "volume" in d:
+        tts_announcer.volume = float(d["volume"])
+    if "cooldown" in d:
+        tts_announcer.cooldown = float(d["cooldown"])
+    return jsonify({"ok": True, **tts_announcer.get_settings()})
+
+
+# =====================================================================
+#  MODEL REGISTRY API
+# =====================================================================
+
+@app.route("/api/models/registry")
+def api_models_registry():
+    """List all stored models in the registry."""
+    model_type = request.args.get("type")
+    return jsonify(model_registry.list_models(model_type))
+
+
+@app.route("/api/models/registry/activate", methods=["POST"])
+def api_models_registry_activate():
+    """Activate a stored model by ID."""
+    d = request.get_json(force=True, silent=True) or {}
+    model_id = d.get("id")
+    if not model_id:
+        return jsonify({"ok": False, "error": "Missing model id"}), 400
+    ok = model_registry.activate(model_id)
+    if ok:
+        model_mgr.force_reload()
+        return jsonify({"ok": True, "message": f"Activated {model_id}"})
+    return jsonify({"ok": False, "error": "Model not found or already active"}), 404
+
+
+@app.route("/api/models/registry/<model_id>", methods=["DELETE"])
+def api_models_registry_delete(model_id):
+    """Delete a stored model by ID."""
+    ok = model_registry.delete(model_id)
+    if ok:
+        return jsonify({"ok": True, "message": f"Deleted {model_id}"})
+    return jsonify({"ok": False,
+                    "error": "Not found or cannot delete active model"}), 400
+
+
+# =====================================================================
 #  MAIN
 # =====================================================================
 
 if __name__ == "__main__":
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        lan_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        lan_ip = "127.0.0.1"
+
     print("=" * 56)
     print("  Smart Glasses - Object Detection Web App")
-    print("  http://localhost:5000")
+    print(f"  Local:   http://localhost:5000")
+    print(f"  LAN:     http://{lan_ip}:5000")
     print("=" * 56)
-    app.run(host="0.0.0.0", port=5000, debug=True, threaded=True)
+    app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)

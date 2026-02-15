@@ -111,6 +111,7 @@ def step_dirs():
         ROOT / "trained_models" / "image_model",
         ROOT / "trained_models" / "text_model",
         ROOT / "trained_models" / "voice_model",
+        ROOT / "trained_models" / "models",
     ]
     for d in dirs:
         d.mkdir(parents=True, exist_ok=True)
@@ -125,6 +126,7 @@ def step_verify():
         ("NumPy",        "import numpy; print(f'  NumPy {numpy.__version__}')"),
         ("PyTorch",      "import torch; print(f'  PyTorch {torch.__version__}')"),
         ("torchvision",  "import torchvision; print(f'  torchvision {torchvision.__version__}')"),
+        ("ultralytics",  "import ultralytics; print(f'  ultralytics {ultralytics.__version__}')"),
         ("scikit-learn", "import sklearn; print(f'  scikit-learn {sklearn.__version__}')"),
     ]
     all_ok = True

@@ -106,9 +106,54 @@ status = StatusTracker()
 # ======================================================================
 #  DATASET TYPE DETECTOR
 # ======================================================================
+def _is_yolo_detection_dataset(p: Path) -> bool:
+    """Check if the dataset has YOLO object detection annotations."""
+    # Check for data.yaml with YOLO project config
+    for yaml_file in p.rglob("*.yaml"):
+        try:
+            content = yaml_file.read_text(errors='ignore')
+            if 'train:' in content and ('nc:' in content or 'names:' in content):
+                return True
+        except Exception:
+            pass
+
+    # Check for images/ + labels/ directories with YOLO txt annotations
+    for d in p.rglob("*"):
+        if not d.is_dir() or d.name.lower() not in ('images', 'image', 'img'):
+            continue
+        for lbl_name in ('labels', 'label', 'lbl'):
+            label_dir = d.parent / lbl_name
+            if label_dir.exists() and label_dir.is_dir():
+                skip = {'classes.txt', 'labels.txt', 'obj.data'}
+                for txt in label_dir.glob("*.txt"):
+                    if txt.name.lower() in skip:
+                        continue
+                    content = txt.read_text(errors='ignore').strip()
+                    if not content:
+                        continue
+                    line = content.split('\n')[0].strip()
+                    parts = line.split()
+                    if len(parts) >= 5:
+                        try:
+                            int(parts[0])
+                            [float(x) for x in parts[1:5]]
+                            return True
+                        except (ValueError, IndexError):
+                            pass
+                    break  # Only check first label file
+    return False
+
+
 def detect_dataset_type(path: str) -> str:
+    p = Path(path)
+
+    # Check for YOLO detection dataset first (images + bbox labels)
+    if _is_yolo_detection_dataset(p):
+        return "yolo_detection"
+
+    # Fall back to file extension counting
     counts = {"image": 0, "audio": 0, "text": 0}
-    for f in Path(path).rglob("*"):
+    for f in p.rglob("*"):
         if f.is_file():
             ext = f.suffix.lower()
             if ext in IMAGE_EXTS:   counts["image"] += 1
@@ -414,10 +459,14 @@ class ImageTrainer:
                           'training', 'testing'}
 
         # ── (1) YOLO project file  (data.yaml / data.yml) ──
+        # NOTE: YOLO detection datasets should go through YOLODetectionTrainer.
+        # If we reach here, the user forced type=image on a YOLO dataset.
         yolo_cfg = self._read_yolo_yaml(p)
         if yolo_cfg:
-            logger.info("Dataset layout: YOLO project (data.yaml)")
-            return self._yolo_project_to_classification(p, yolo_cfg)
+            raise ValueError(
+                "This is a YOLO object-detection dataset (data.yaml found). "
+                "It will be automatically trained with the YOLO detection "
+                "trainer.  Do not force type='image' on YOLO datasets.")
 
         # ── (2) Train/test/val splits ──
         if dir_names and dir_names <= (split_keywords | _internal):
@@ -449,16 +498,16 @@ class ImageTrainer:
             return self._ensure_multiclass(crop_root)
 
         # ── (5) YOLO txt labels  (images/ + labels/ with *.txt) ──
+        # Redirected to YOLODetectionTrainer – should not reach here
         label_dir = self._find_dir(p, ['labels', 'label', 'yolo_labels'])
         if label_dir and any(f.suffix == '.txt' for f in label_dir.iterdir()
                              if f.is_file()):
             img_dir = (self._find_dir(p, ['images', 'image', 'img']) or p)
-            class_names = self._read_class_names(p)
-            logger.info(f"Dataset layout: YOLO txt labels "
-                        f"({len(class_names)} classes)")
-            crop_root = self._yolo_txt_to_classification(
-                img_dir, label_dir, class_names)
-            return self._ensure_multiclass(crop_root)
+            if img_dir:
+                raise ValueError(
+                    "This is a YOLO detection dataset (images/ + labels/). "
+                    "It will be automatically trained with the YOLO "
+                    "detection trainer.")
 
         # ── (6a) Pascal VOC: annotation dir + image dir ──
         ann_dir = self._find_dir(p, ['annotations', 'annotation',
@@ -507,18 +556,18 @@ class ImageTrainer:
                      if f.suffix.lower() == '.txt'
                      and f.stem.lower() not in ('classes', 'labels')]
         if txt_files and img_files:
-            # Heuristic: check first txt – YOLO lines have 5 numbers
             try:
                 sample = (txt_files[0].read_text(errors='ignore')
                           .strip().split('\n')[0].split())
                 if len(sample) == 5 and all(
                         _is_number(x) for x in sample):
-                    class_names = self._read_class_names(p)
-                    logger.info(f"Dataset layout: flat YOLO txt "
-                                f"({len(class_names)} classes)")
-                    crop_root = self._yolo_txt_to_classification(
-                        p, p, class_names)
-                    return self._ensure_multiclass(crop_root)
+                    raise ValueError(
+                        "This appears to be a YOLO detection dataset "
+                        "(images + label .txt files in YOLO format). "
+                        "It will be automatically trained with the YOLO "
+                        "detection trainer.")
+            except ValueError:
+                raise
             except Exception:
                 pass
 
@@ -757,170 +806,6 @@ class ImageTrainer:
         return out_root
 
     # ------------------------------------------------------------------
-    #  YOLO txt → classification crops
-    # ------------------------------------------------------------------
-    def _yolo_txt_to_classification(self, img_dir: Path,
-                                     label_dir: Path,
-                                     class_names: dict):
-        """Crop bounding boxes from YOLO txt labels into class folders."""
-        import shutil
-        out_root = self.path / "_prepared_crops"
-        if out_root.exists():
-            shutil.rmtree(out_root)
-
-        skip_names = {'classes.txt', 'labels.txt', 'obj.data'}
-        txt_files  = sorted(f for f in label_dir.glob("*.txt")
-                            if f.name.lower() not in skip_names)
-        class_counts = {}
-        idx = 0
-
-        for ti, txt_file in enumerate(txt_files):
-            stem = txt_file.stem
-            img_path = None
-            for ext in IMAGE_EXTS:
-                cand = img_dir / (stem + ext)
-                if cand.exists():
-                    img_path = cand
-                    break
-            if img_path is None:
-                continue
-            img = cv2.imread(str(img_path))
-            if img is None:
-                continue
-            h, w = img.shape[:2]
-
-            for line in txt_file.read_text(errors='ignore').strip().split('\n'):
-                parts = line.strip().split()
-                if len(parts) < 5:
-                    continue
-                try:
-                    cid = int(parts[0])
-                    xc  = float(parts[1])
-                    yc  = float(parts[2])
-                    bw  = float(parts[3])
-                    bh  = float(parts[4])
-                except (ValueError, IndexError):
-                    continue
-                x1 = max(0, int((xc - bw / 2) * w))
-                y1 = max(0, int((yc - bh / 2) * h))
-                x2 = min(w, int((xc + bw / 2) * w))
-                y2 = min(h, int((yc + bh / 2) * h))
-                if x2 - x1 < 10 or y2 - y1 < 10:
-                    continue
-                cls_name = class_names.get(cid, f"class_{cid}")
-                cls_name = cls_name.strip().lower().replace(" ", "_")
-                crop = img[y1:y2, x1:x2]
-                cls_dir = out_root / cls_name
-                cls_dir.mkdir(parents=True, exist_ok=True)
-                cv2.imwrite(str(cls_dir / f"{idx:06d}.jpg"), crop)
-                class_counts[cls_name] = class_counts.get(cls_name, 0) + 1
-                idx += 1
-
-            if (ti + 1) % 200 == 0:
-                status.update(
-                    message=f"YOLO labels: {ti+1}/{len(txt_files)} files")
-
-        if idx == 0:
-            raise ValueError("No valid crops from YOLO txt annotations.")
-        summary = ", ".join(f"{k}={v}"
-                            for k, v in sorted(class_counts.items()))
-        logger.info(f"YOLO crops: {idx} total ({summary})")
-        status.update(message=f"Prepared {idx} YOLO crops. Training...")
-        return out_root
-
-    # ------------------------------------------------------------------
-    #  YOLO project  (data.yaml → find splits → crop)
-    # ------------------------------------------------------------------
-    def _yolo_project_to_classification(self, p: Path, cfg: dict):
-        """Handle a YOLO project with data.yaml pointing to splits."""
-        import shutil
-        names = cfg.get('names', [])
-        class_names = {i: n for i, n in enumerate(names)}
-        base_path = p / cfg['path'] if cfg.get('path') else p
-
-        out_root = self.path / "_prepared_crops"
-        if out_root.exists():
-            shutil.rmtree(out_root)
-
-        class_counts = {}
-        idx = 0
-
-        for key in ('train', 'val', 'test'):
-            if key not in cfg:
-                continue
-            raw = cfg[key].strip().strip("'\"").replace('\\', '/')
-            img_dir = base_path / raw
-            if not img_dir.exists():
-                img_dir = p / Path(raw).name
-            if not img_dir.exists():
-                img_dir = p / raw
-            if not img_dir.exists():
-                continue
-
-            # YOLO convention: labels/ mirrors images/
-            label_dir = Path(
-                str(img_dir).replace('/images', '/labels')
-                            .replace('\\images', '\\labels'))
-            if not label_dir.exists():
-                label_dir = img_dir.parent / 'labels'
-            if not label_dir.exists():
-                continue
-
-            skip = {'classes.txt', 'labels.txt', 'obj.data'}
-            for txt in sorted(label_dir.glob("*.txt")):
-                if txt.name.lower() in skip:
-                    continue
-                stem = txt.stem
-                img_path = None
-                for ext in IMAGE_EXTS:
-                    cand = img_dir / (stem + ext)
-                    if cand.exists():
-                        img_path = cand
-                        break
-                if not img_path:
-                    continue
-                img = cv2.imread(str(img_path))
-                if img is None:
-                    continue
-                h, w = img.shape[:2]
-                for line in txt.read_text(errors='ignore').strip().split('\n'):
-                    parts = line.strip().split()
-                    if len(parts) < 5:
-                        continue
-                    try:
-                        cid = int(parts[0])
-                        xc, yc = float(parts[1]), float(parts[2])
-                        bw, bh = float(parts[3]), float(parts[4])
-                    except (ValueError, IndexError):
-                        continue
-                    x1 = max(0, int((xc - bw / 2) * w))
-                    y1 = max(0, int((yc - bh / 2) * h))
-                    x2 = min(w, int((xc + bw / 2) * w))
-                    y2 = min(h, int((yc + bh / 2) * h))
-                    if x2 - x1 < 10 or y2 - y1 < 10:
-                        continue
-                    cn = class_names.get(cid, f"class_{cid}")
-                    cn = cn.strip().lower().replace(" ", "_")
-                    d = out_root / cn
-                    d.mkdir(parents=True, exist_ok=True)
-                    cv2.imwrite(str(d / f"{idx:06d}.jpg"),
-                                img[y1:y2, x1:x2])
-                    class_counts[cn] = class_counts.get(cn, 0) + 1
-                    idx += 1
-
-            status.update(message=f"YOLO split '{key}': {idx} crops so far")
-
-        if idx == 0:
-            raise ValueError(
-                "No valid crops from YOLO project (data.yaml). "
-                "Check that images/ and labels/ dirs exist next to each other.")
-        summary = ", ".join(f"{k}={v}"
-                            for k, v in sorted(class_counts.items()))
-        logger.info(f"YOLO project: {idx} crops ({summary})")
-        status.update(message=f"Prepared {idx} YOLO crops. Training...")
-        return self._ensure_multiclass(out_root)
-
-    # ------------------------------------------------------------------
     #  CSV flat  →  class sub-folders
     # ------------------------------------------------------------------
     def _csv_flat_to_classification(self, img_root: Path, csv_map: dict):
@@ -983,77 +868,12 @@ class ImageTrainer:
         sub_files  = [f for f in sub_items if f.is_file()]
 
         # ── Format C: YOLO inside splits (images/ + labels/) ─────────
+        # Redirected to YOLODetectionTrainer – should not reach here
         if 'images' in sub_dirs and 'labels' in sub_dirs:
-            logger.info("Split format: YOLO txt (images/ + labels/)")
-            class_names = self._read_class_names(base)
-            # also check inside each split dir
-            if not class_names:
-                class_names = self._read_class_names(first_sd)
-            crop_root = self.path / "_prepared_crops"
-            if crop_root.exists():
-                shutil.rmtree(crop_root)
-
-            class_counts = {}
-            idx = 0
-            skip = {'classes.txt', 'labels.txt', 'obj.data'}
-            for sd in split_dirs:
-                sd_img  = sd / 'images'
-                sd_lbl  = sd / 'labels'
-                if not sd_img.exists() or not sd_lbl.exists():
-                    continue
-                for txt in sorted(sd_lbl.glob("*.txt")):
-                    if txt.name.lower() in skip:
-                        continue
-                    stem = txt.stem
-                    img_path = None
-                    for ext in IMAGE_EXTS:
-                        cand = sd_img / (stem + ext)
-                        if cand.exists():
-                            img_path = cand
-                            break
-                    if not img_path:
-                        continue
-                    img = cv2.imread(str(img_path))
-                    if img is None:
-                        continue
-                    h, w = img.shape[:2]
-                    for line in (txt.read_text(errors='ignore')
-                                 .strip().split('\n')):
-                        parts = line.strip().split()
-                        if len(parts) < 5:
-                            continue
-                        try:
-                            cid = int(parts[0])
-                            xc, yc = float(parts[1]), float(parts[2])
-                            bw, bh = float(parts[3]), float(parts[4])
-                        except (ValueError, IndexError):
-                            continue
-                        x1 = max(0, int((xc - bw / 2) * w))
-                        y1 = max(0, int((yc - bh / 2) * h))
-                        x2 = min(w, int((xc + bw / 2) * w))
-                        y2 = min(h, int((yc + bh / 2) * h))
-                        if x2 - x1 < 10 or y2 - y1 < 10:
-                            continue
-                        cn = class_names.get(cid, f"class_{cid}")
-                        cn = cn.strip().lower().replace(" ", "_")
-                        d = crop_root / cn
-                        d.mkdir(parents=True, exist_ok=True)
-                        cv2.imwrite(str(d / f"{idx:06d}.jpg"),
-                                    img[y1:y2, x1:x2])
-                        class_counts[cn] = class_counts.get(cn, 0) + 1
-                        idx += 1
-                status.update(
-                    message=f"YOLO split '{sd.name}': {idx} crops so far")
-
-            if idx == 0:
-                raise ValueError(
-                    "YOLO splits detected but no crops could be extracted.")
-            summary = ", ".join(f"{k}={v}"
-                                for k, v in sorted(class_counts.items()))
-            logger.info(f"YOLO splits: {idx} crops ({summary})")
-            status.update(
-                message=f"Prepared {idx} YOLO crops. Training...")
-            return self._ensure_multiclass(crop_root)
+            raise ValueError(
+                "This is a YOLO detection dataset (splits with images/ + "
+                "labels/).  It will be automatically trained with the "
+                "YOLO detection trainer.")
 
         # ── Format D: COCO JSON inside a split dir ───────────────────
         for sd in split_dirs:
@@ -1384,6 +1204,399 @@ class VoiceTrainer:
 
 
 # ======================================================================
+#  YOLO DETECTION TRAINER  (Ultralytics – fine-tune on custom datasets)
+# ======================================================================
+class YOLODetectionTrainer:
+    """
+    Train a YOLO object detection model using Ultralytics on labelled
+    datasets in YOLO txt format (images/ + labels/ + classes.txt).
+
+    Follows the approach from Train_YOLO_Models.ipynb:
+      1. Detect / prepare dataset structure
+      2. Auto-split train/val (90/10) if not already split
+      3. Generate data.yaml
+      4. Fine-tune yolo11s on the dataset
+      5. Save best.pt → trained_models/yolo_custom/
+    """
+
+    def __init__(self, path, epochs=60, batch_size=16, lr=0.01, imgsz=640):
+        self.path = Path(path)
+        self.epochs = epochs
+        self.bs = batch_size
+        self.lr = lr
+        self.imgsz = imgsz
+        self.output_dir = MODELS_DIR / "yolo_custom"
+
+    def train(self):
+        from ultralytics import YOLO
+
+        status.update(status="training",
+                      message="Preparing YOLO detection dataset…",
+                      total_epochs=self.epochs)
+
+        # ── 1. Prepare dataset ──
+        dataset_root, class_names = self._prepare_yolo_dataset()
+        logger.info(f"YOLO dataset ready: {len(class_names)} classes at {dataset_root}")
+
+        # ── 2. Create / validate data.yaml ──
+        data_yaml = self._create_data_yaml(dataset_root, class_names)
+        logger.info(f"data.yaml → {data_yaml}")
+
+        # ── 3. Pick base model (prefer on-disk weights) ──
+        base_model = "yolo11s.pt"
+        local = PROJECT_ROOT / "yolo-coco" / "yolo11s.pt"
+        if local.exists():
+            base_model = str(local)
+
+        model = YOLO(base_model)
+
+        # ── 4. Progress callback ──
+        def _on_epoch_end(trainer_obj):
+            ep = trainer_obj.epoch + 1
+            total = trainer_obj.epochs
+            metrics = trainer_obj.metrics or {}
+            box_loss = metrics.get("train/box_loss", 0)
+            cls_loss = metrics.get("train/cls_loss", 0)
+            map50 = metrics.get("metrics/mAP50(B)", 0)
+            loss_val = round(float(box_loss) + float(cls_loss), 4)
+            map_val  = round(float(map50), 4)
+            hist_entry = {"epoch": ep, "loss": loss_val, "accuracy": map_val}
+            cur = status.get()
+            history = cur.get("history", [])
+            history.append(hist_entry)
+            status.update(
+                epoch=ep, total_epochs=total,
+                loss=loss_val, accuracy=map_val,
+                progress=int(ep / total * 100),
+                history=history,
+                message=f"Epoch {ep}/{total} — mAP50={map_val:.3f}",
+            )
+
+        model.add_callback("on_fit_epoch_end", _on_epoch_end)
+
+        status.update(
+            message=f"Training YOLO on {len(class_names)} classes for "
+                    f"{self.epochs} epochs (imgsz={self.imgsz})…")
+
+        # ── 5. Train ──
+        results = model.train(
+            data=str(data_yaml),
+            epochs=self.epochs,
+            imgsz=self.imgsz,
+            batch=self.bs,
+            lr0=self.lr,
+            project=str(MODELS_DIR / "yolo_runs"),
+            name="train",
+            exist_ok=True,
+            verbose=False,
+        )
+
+        # ── 6. Copy best.pt → trained_models/yolo_custom/ ──
+        save_dir = (Path(results.save_dir)
+                    if hasattr(results, "save_dir")
+                    else MODELS_DIR / "yolo_runs" / "train")
+        best_pt = save_dir / "weights" / "best.pt"
+        if not best_pt.exists():
+            best_pt = save_dir / "weights" / "last.pt"
+        if not best_pt.exists():
+            raise ValueError(
+                f"Training finished but no weights found at {save_dir}")
+
+        import shutil
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(str(best_pt), str(self.output_dir / "best.pt"))
+
+        # ── 7. Save metadata ──
+        try:
+            map50 = float(results.results_dict.get("metrics/mAP50(B)", 0))
+        except Exception:
+            map50 = 0.0
+
+        meta = {
+            "classes": class_names,
+            "num_classes": len(class_names),
+            "epochs": self.epochs,
+            "imgsz": self.imgsz,
+            "accuracy": map50,
+            "model_type": "yolo_detection",
+            "trained_at": datetime.now().isoformat(),
+            "base_model": "yolo11s",
+        }
+        (self.output_dir / "meta.json").write_text(
+            json.dumps(meta, indent=2))
+
+        mp = str(self.output_dir / "best.pt")
+        logger.info(f"YOLO training complete! mAP50={map50:.3f} → {mp}")
+        return mp, meta
+
+    # ------------------------------------------------------------------
+    #  Dataset preparation
+    # ------------------------------------------------------------------
+    def _prepare_yolo_dataset(self):
+        """
+        Detect dataset layout and return (dataset_root, class_names).
+        Handles three layouts:
+          A) data.yaml already present (YOLO project)
+          B) Pre-split  train/ + val/ directories
+          C) Flat images/ + labels/ → auto-split 90/10
+        """
+        p = self.path
+
+        # ── A: data.yaml exists ──
+        for yf in p.rglob("*.yaml"):
+            cfg = self._read_yolo_yaml(yf)
+            if not cfg or "names" not in cfg:
+                continue
+            names_raw = cfg["names"]
+            if isinstance(names_raw, dict):
+                class_names = [names_raw[k] for k in sorted(names_raw.keys())]
+            elif isinstance(names_raw, list):
+                class_names = list(names_raw)
+            else:
+                continue
+            base = (yf.parent / cfg["path"]
+                    if cfg.get("path") else yf.parent)
+            train_rel = cfg.get("train", "train/images")
+            train_dir = base / train_rel
+            if not train_dir.exists():
+                train_dir = yf.parent / train_rel
+            if train_dir.exists():
+                status.update(
+                    message=f"Found data.yaml with {len(class_names)} classes")
+                return yf.parent, class_names
+
+        # ── B: Already split (train/ + val/) ──
+        train_d = self._find_split_dir(p, "train")
+        val_d   = self._find_split_dir(p, "val") or self._find_split_dir(p, "valid")
+        if train_d and val_d:
+            class_names = self._read_class_names_auto(p)
+            status.update(
+                message=f"Found pre-split dataset ({len(class_names)} classes)")
+            return p, class_names
+
+        # ── C: Flat images/ + labels/ → auto-split ──
+        img_dir = self._find_subdir(p, ["images", "image", "img"])
+        lbl_dir = self._find_subdir(p, ["labels", "label", "lbl"])
+        if img_dir and lbl_dir:
+            class_names = self._read_class_names_auto(p)
+            dataset_root = self._split_dataset(img_dir, lbl_dir)
+            return dataset_root, class_names
+
+        raise ValueError(
+            "Cannot find YOLO dataset structure.  Expected:\n"
+            "  1) data.yaml with train/val paths, OR\n"
+            "  2) train/ and val/ directories, OR\n"
+            "  3) images/ + labels/ directories")
+
+    # ------------------------------------------------------------------
+    def _split_dataset(self, img_dir: Path, lbl_dir: Path) -> Path:
+        """Split flat images/ + labels/ into 90 % train, 10 % val."""
+        import shutil, random
+
+        pairs = []
+        skip = {"classes.txt", "labels.txt", "obj.data"}
+        for txt in sorted(lbl_dir.glob("*.txt")):
+            if txt.name.lower() in skip:
+                continue
+            stem = txt.stem
+            for ext in IMAGE_EXTS:
+                img = img_dir / (stem + ext)
+                if img.exists():
+                    pairs.append((img, txt))
+                    break
+
+        if not pairs:
+            raise ValueError("No matching image / label pairs found.")
+
+        random.shuffle(pairs)
+        sp = max(1, int(len(pairs) * 0.9))
+        train_pairs, val_pairs = pairs[:sp], pairs[sp:]
+        if not val_pairs:
+            val_pairs = [train_pairs.pop()]
+
+        root = self.path / "_yolo_split"
+        if root.exists():
+            shutil.rmtree(root)
+
+        for name, prs in [("train", train_pairs), ("val", val_pairs)]:
+            (root / name / "images").mkdir(parents=True, exist_ok=True)
+            (root / name / "labels").mkdir(parents=True, exist_ok=True)
+            for ip, lp in prs:
+                shutil.copy2(str(ip), str(root / name / "images" / ip.name))
+                shutil.copy2(str(lp), str(root / name / "labels" / lp.name))
+
+        # Also copy classes.txt if it exists
+        for cn in ("classes.txt", "obj.names", "_classes.txt"):
+            cf = self.path / cn
+            if not cf.exists():
+                found = list(self.path.rglob(cn))
+                cf = found[0] if found else None
+            if cf and cf.exists():
+                shutil.copy2(str(cf), str(root / cf.name))
+                break
+
+        status.update(
+            message=f"Split: {len(train_pairs)} train, {len(val_pairs)} val")
+        logger.info(f"Auto-split: {len(train_pairs)} train / {len(val_pairs)} val")
+        return root
+
+    # ------------------------------------------------------------------
+    def _create_data_yaml(self, dataset_root: Path,
+                          class_names: list) -> Path:
+        """Create (or reuse) a valid data.yaml for Ultralytics."""
+        # Reuse existing data.yaml if valid
+        for yf in dataset_root.rglob("*.yaml"):
+            cfg = self._read_yolo_yaml(yf)
+            if cfg and "names" in cfg and "train" in cfg:
+                # Patch absolute path so Ultralytics can find images
+                cfg["path"] = str(dataset_root.resolve())
+                self._write_yaml(yf, cfg)
+                return yf
+
+        # Determine train / val relative paths
+        train_path = val_path = ""
+        for cand in ("train/images", "train"):
+            if (dataset_root / cand).exists():
+                train_path = cand
+                break
+        for cand in ("val/images", "valid/images", "val", "valid"):
+            if (dataset_root / cand).exists():
+                val_path = cand
+                break
+
+        if not train_path or not val_path:
+            raise ValueError(
+                "Could not locate train/ and val/ inside the dataset root.")
+
+        cfg = {
+            "path": str(dataset_root.resolve()),
+            "train": train_path,
+            "val": val_path,
+            "nc": len(class_names),
+            "names": class_names,
+        }
+
+        yaml_path = dataset_root / "data.yaml"
+        self._write_yaml(yaml_path, cfg)
+        return yaml_path
+
+    # ------------------------------------------------------------------
+    #  Helpers
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _write_yaml(path: Path, cfg: dict):
+        """Write a data.yaml file (avoid external YAML dep on Windows)."""
+        lines = []
+        for k, v in cfg.items():
+            if isinstance(v, list):
+                lines.append(f"{k}: {v}")
+            else:
+                lines.append(f"{k}: {v}")
+        path.write_text("\n".join(lines) + "\n")
+
+    @staticmethod
+    def _read_yolo_yaml(yaml_path: Path) -> dict | None:
+        """Parse a YOLO data.yaml (try PyYAML, fall back to regex)."""
+        try:
+            import yaml
+            return yaml.safe_load(yaml_path.read_text(errors="ignore"))
+        except ImportError:
+            pass
+        except Exception:
+            return None
+        # manual fallback
+        import ast
+        cfg = {}
+        for line in yaml_path.read_text(errors="ignore").splitlines():
+            line = line.strip()
+            if ":" not in line or line.startswith("#"):
+                continue
+            key, val = line.split(":", 1)
+            key, val = key.strip(), val.strip()
+            if key == "nc":
+                try:
+                    cfg[key] = int(val)
+                except ValueError:
+                    cfg[key] = val
+            elif key == "names":
+                try:
+                    cfg[key] = ast.literal_eval(val)
+                except Exception:
+                    cfg[key] = val
+            else:
+                cfg[key] = val.strip("'\"")
+        return cfg
+
+    def _read_class_names_auto(self, search_root: Path) -> list:
+        """Find class names from classes.txt / obj.names or infer from labels."""
+        for name in ("classes.txt", "obj.names", "_classes.txt"):
+            found = list(search_root.rglob(name))
+            if found:
+                names = [l.strip() for l in
+                         found[0].read_text(errors="ignore")
+                         .strip().splitlines() if l.strip()]
+                if names:
+                    return names
+
+        # Infer from label files
+        ids = set()
+        for lbl_dir in search_root.rglob("labels"):
+            if not lbl_dir.is_dir():
+                continue
+            skip = {"classes.txt", "labels.txt", "obj.data"}
+            for txt in lbl_dir.glob("*.txt"):
+                if txt.name.lower() in skip:
+                    continue
+                for line in (txt.read_text(errors="ignore")
+                             .strip().split("\n")):
+                    parts = line.strip().split()
+                    if len(parts) >= 5:
+                        try:
+                            ids.add(int(parts[0]))
+                        except ValueError:
+                            pass
+                if ids:
+                    break
+            if ids:
+                break
+
+        if ids:
+            return [f"class_{i}" for i in range(max(ids) + 1)]
+
+        raise ValueError(
+            "Cannot determine class names.  "
+            "Please include a classes.txt file in the dataset.")
+
+    @staticmethod
+    def _find_subdir(base: Path, candidates: list) -> Path | None:
+        for name in candidates:
+            d = base / name
+            if d.is_dir():
+                return d
+        for name in candidates:
+            for d in base.rglob(name):
+                if d.is_dir():
+                    return d
+        return None
+
+    @staticmethod
+    def _find_split_dir(base: Path, split_name: str) -> Path | None:
+        """Return the split directory if it contains images (directly or
+        in an images/ sub-folder)."""
+        d = base / split_name
+        if not d.exists():
+            return None
+        img_sub = d / "images"
+        if img_sub.exists():
+            return d
+        # Check if it has images directly
+        for ext in IMAGE_EXTS:
+            if list(d.glob(f"*{ext}")):
+                return d
+        return None
+
+
+# ======================================================================
 #  MAIN ENTRY POINT
 # ======================================================================
 def run_training(dataset_path, force_type=None, epochs=None, batch_size=None, lr=None):
@@ -1399,10 +1612,39 @@ def run_training(dataset_path, force_type=None, epochs=None, batch_size=None, lr
         if batch_size:  kw["batch_size"] = batch_size
         if lr:          kw["lr"] = lr
 
-        T = {"image": ImageTrainer, "audio": VoiceTrainer,
-             "voice": VoiceTrainer, "text": TextTrainer}
-        trainer = T[ds](dataset_path, **kw)
+        # ── Route to the correct trainer ──
+        if ds == "yolo_detection":
+            # YOLO detection training (Ultralytics fine-tune)
+            yolo_kw = {}
+            if epochs:      yolo_kw["epochs"] = epochs
+            if batch_size:  yolo_kw["batch_size"] = batch_size
+            if lr:          yolo_kw["lr"] = lr
+            trainer = YOLODetectionTrainer(dataset_path, **yolo_kw)
+        else:
+            T = {"image": ImageTrainer, "audio": VoiceTrainer,
+                 "voice": VoiceTrainer, "text": TextTrainer}
+            trainer = T[ds](dataset_path, **kw)
+
         mp, meta = trainer.train()
+
+        # ── register in multi-model registry ──
+        try:
+            from model_manager import model_registry
+            ds_name = Path(dataset_path).name.replace("_", " ").title()
+            classes = meta.get("classes", [])
+            accuracy = meta.get("accuracy", 0.0)
+            model_type = meta.get("model_type", "voice" if ds == "audio" else ds)
+            model_registry.register(
+                model_type=model_type,
+                name=ds_name,
+                classes=classes,
+                accuracy=accuracy,
+                meta=meta,
+            )
+            logger.info(f"Model registered in registry: {ds_name}")
+        except Exception as reg_err:
+            logger.warning(f"Registry save failed (non-fatal): {reg_err}")
+
         status.update(status="done", progress=100, model_path=mp,
                       finished_at=datetime.now().isoformat(),
                       message=f"Done! Model → {mp}")
